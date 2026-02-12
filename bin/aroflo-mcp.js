@@ -23,7 +23,16 @@ if (args.includes('--help') || args.includes('-h')) {
 }
 
 if (args.includes('--version') || args.includes('-v')) {
-  process.stdout.write('0.1.0\n');
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const url = await import('node:url');
+
+  const __filename = url.fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+
+  const pkgPath = path.join(__dirname, '..', 'package.json');
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+  process.stdout.write(String(pkg.version) + '\n');
   process.exit(0);
 }
 

@@ -4,23 +4,40 @@ Standalone, production-ready MCP server for AroFlo with first-class request sign
 
 ## Quick Start
 
-1. Install dependencies:
-
-```bash
-npm install
-```
-
-### Install As A Local MCP Server (Codex)
+### Install (Local)
 
 This repo ships an MCP server executable named `aroflo-mcp` (stdio transport by default).
 
-1. Install the server on your machine (puts `aroflo-mcp` on your PATH via `npm link`):
+Install the server on your machine (puts `aroflo-mcp` on your PATH via `npm link`):
 
 ```bash
 make install
 ```
 
-2. Add it to Codex (env is stored in Codex config, not passed as tool args):
+### Install Into Codex (stdio)
+
+1. Create a local `.env` (not committed) with your credentials:
+
+```bash
+cp .env.example .env
+# edit .env
+```
+
+2. Register the server in Codex (stores env in `~/.codex/config.toml`, not passed as tool args):
+
+```bash
+make codex-install
+```
+
+3. Verify:
+
+```bash
+codex mcp get aroflo
+```
+
+### Manual Codex Install (Alternative)
+
+If you prefer doing it manually (same env variables, stored in Codex config):
 
 ```bash
 codex mcp add aroflo \
@@ -31,7 +48,7 @@ codex mcp add aroflo \
   --env AROFLO_PENCODED=... \
   --env AROFLO_ORG_ENCODED=... \
   --env MCP_TRANSPORT=stdio \
-  -- aroflo-mcp
+  -- "$(command -v node)" "$(pwd)/dist/mcp/server.js"
 ```
 
 Notes:
@@ -40,26 +57,28 @@ Notes:
 - Fix 1: Launch Codex from a terminal so it inherits your shell PATH (`codex app`).
 - Fix 2: Configure the MCP server to run via an absolute Node path (see `docs/runbooks.md`).
 
-2. Copy environment template and fill credentials:
+### Development
+
+Install dependencies:
 
 ```bash
-cp .env.example .env
+npm install
 ```
 
-3. Build and test:
+Build and test:
 
 ```bash
 npm run test
 npm run build
 ```
 
-4. Run server (stdio):
+Run server (stdio):
 
 ```bash
 npm run dev
 ```
 
-5. Run server (HTTP Streamable transport):
+Run server (HTTP Streamable transport):
 
 ```bash
 MCP_TRANSPORT=http npm run dev:http
