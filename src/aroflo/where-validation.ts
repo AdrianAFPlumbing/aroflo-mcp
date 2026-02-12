@@ -49,7 +49,9 @@ export async function validateWhereOrThrow(options: ValidateWhereOptions): Promi
   }
 
   const uniq = Array.from(new Set(invalid)).sort((a, b) => a.localeCompare(b));
-  const allowedPreview = Array.from(doc.whereFields).sort((a, b) => a.localeCompare(b)).slice(0, 30);
+  const allowedPreview = Array.from(doc.whereFields)
+    .sort((a, b) => a.localeCompare(b))
+    .slice(0, 30);
 
   let hint = '';
   if (slug === 'tasks' && uniq.includes('projectid')) {
@@ -63,4 +65,3 @@ export async function validateWhereOrThrow(options: ValidateWhereOptions): Promi
       `See aroflo://docs/api/${doc.slug}. Allowed WHERE fields include: ${allowedPreview.join(', ')}.${hint}`
   );
 }
-

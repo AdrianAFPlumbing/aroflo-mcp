@@ -9,10 +9,7 @@ import {
   normalizeWhereParam
 } from '../../aroflo/normalize-params.js';
 import { validateWhereOrThrow } from '../../aroflo/where-validation.js';
-import {
-  mergeZoneResponseData,
-  truncateZoneArrays
-} from '../../aroflo/paginate.js';
+import { mergeZoneResponseData, truncateZoneArrays } from '../../aroflo/paginate.js';
 import { compactZoneResponseData } from '../../aroflo/select.js';
 import { buildZoneDataEnvelope, resolveOutputMode } from '../output.js';
 import { errorToolResult, successToolResult } from './shared.js';
@@ -150,7 +147,10 @@ export function registerQueryZoneTool(server: McpServer, client: AroFloClient): 
               break;
             }
 
-            response = { ...response, data: mergeZoneResponseData(response.data, next.data).merged };
+            response = {
+              ...response,
+              data: mergeZoneResponseData(response.data, next.data).merged
+            };
             pagesFetched += 1;
             lastPageCount = nextCount;
 

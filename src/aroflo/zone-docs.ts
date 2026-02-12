@@ -122,4 +122,3 @@ export async function getZoneDocInfo(slug: string): Promise<ZoneDocInfo | undefi
   }
   return cache.get(slug.toLowerCase());
 }
-

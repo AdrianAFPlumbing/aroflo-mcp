@@ -140,7 +140,10 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
               break;
             }
 
-            response = { ...response, data: mergeZoneResponseData(response.data, next.data).merged };
+            response = {
+              ...response,
+              data: mergeZoneResponseData(response.data, next.data).merged
+            };
             if (nextPageCount < pageSize) {
               break;
             }
@@ -342,7 +345,12 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
           }
 
           perClientResults[clientId] = getTasksArray(res.data);
-          perClientMeta[clientId] = { pagesFetched, totalTasks: getTasksArray(res.data).length, truncated, nextPage };
+          perClientMeta[clientId] = {
+            pagesFetched,
+            totalTasks: getTasksArray(res.data).length,
+            truncated,
+            nextPage
+          };
         }
 
         // Flatten + filter by project id.
@@ -391,22 +399,21 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
           }
         }
 
-        const projects = Object.entries(tasksByProject).map(([projectId, tasks]) => {
-          const p = projectsById[projectId];
-          const projectName =
-            isRecord(p) && typeof p.projectname === 'string' ? p.projectname : undefined;
-          const projectNumber =
-            isRecord(p) && typeof p.projectnumber !== 'undefined' ? p.projectnumber : undefined;
-          const refno = isRecord(p) && typeof p.refno !== 'undefined' ? p.refno : undefined;
+        const projects = Object.entries(tasksByProject)
+          .map(([projectId, tasks]) => {
+            const p = projectsById[projectId];
+            const projectName =
+              isRecord(p) && typeof p.projectname === 'string' ? p.projectname : undefined;
+            const projectNumber =
+              isRecord(p) && typeof p.projectnumber !== 'undefined' ? p.projectnumber : undefined;
+            const refno = isRecord(p) && typeof p.refno !== 'undefined' ? p.refno : undefined;
 
-          const clientInfoRaw = isRecord(p) ? p.client : undefined;
-          const clientInfo = isRecord(clientInfoRaw)
-            ? { orgid: clientInfoRaw.orgid, orgname: clientInfoRaw.orgname }
-            : undefined;
+            const clientInfoRaw = isRecord(p) ? p.client : undefined;
+            const clientInfo = isRecord(clientInfoRaw)
+              ? { orgid: clientInfoRaw.orgid, orgname: clientInfoRaw.orgname }
+              : undefined;
 
-          const mappedTasks = tasks
-            .filter(isRecord)
-            .map((t) => {
+            const mappedTasks = tasks.filter(isRecord).map((t) => {
               const totals = t.tasktotals;
               const hours = isRecord(totals) ? toNumber(totals.totalhrs) : 0;
               const mapped: Record<string, unknown> = {
@@ -422,27 +429,36 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
               return mapped;
             });
 
-          const filteredTasks = mappedTasks
-            .filter((t) => !args.hoursOnly || toNumber((t as any).hours) > 0)
-            .sort((a, b) => {
-              const ad = String((a as any).daterequested ?? '');
-              const bd = String((b as any).daterequested ?? '');
-              if (ad !== bd) return ad.localeCompare(bd);
-              return String((a as any).refcode ?? '').localeCompare(String((b as any).refcode ?? ''));
-            });
+            const filteredTasks = mappedTasks
+              .filter((t) => !args.hoursOnly || toNumber((t as any).hours) > 0)
+              .sort((a, b) => {
+                const ad = String((a as any).daterequested ?? '');
+                const bd = String((b as any).daterequested ?? '');
+                if (ad !== bd) return ad.localeCompare(bd);
+                return String((a as any).refcode ?? '').localeCompare(
+                  String((b as any).refcode ?? '')
+                );
+              });
 
-          const totalHours = filteredTasks.reduce((sum, t) => sum + toNumber((t as any).hours), 0);
+            const totalHours = filteredTasks.reduce(
+              (sum, t) => sum + toNumber((t as any).hours),
+              0
+            );
 
-          return {
-            projectid: projectId,
-            projectnumber: projectNumber,
-            projectname: projectName,
-            refno,
-            client: clientInfo,
-            totalHours,
-            tasks: filteredTasks
-          };
-        }).sort((a, b) => (toInt((a as any).projectnumber) ?? 0) - (toInt((b as any).projectnumber) ?? 0));
+            return {
+              projectid: projectId,
+              projectnumber: projectNumber,
+              projectname: projectName,
+              refno,
+              client: clientInfo,
+              totalHours,
+              tasks: filteredTasks
+            };
+          })
+          .sort(
+            (a, b) =>
+              (toInt((a as any).projectnumber) ?? 0) - (toInt((b as any).projectnumber) ?? 0)
+          );
 
         const projectCount = projects.length;
         const taskCount = projects.reduce((sum, p) => sum + ((p as any).tasks?.length ?? 0), 0);
@@ -701,14 +717,14 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
           .filter(isRecord)
           .map((p) => {
             const pid = p.projectid as string;
-            const tasks = (tasksByProject[pid] ?? [])
-              .filter(isRecord)
-              .sort((a, b) => {
-                const ad = String((a as any).daterequested ?? '');
-                const bd = String((b as any).daterequested ?? '');
-                if (ad !== bd) return ad.localeCompare(bd);
-                return String((a as any).refcode ?? '').localeCompare(String((b as any).refcode ?? ''));
-              });
+            const tasks = (tasksByProject[pid] ?? []).filter(isRecord).sort((a, b) => {
+              const ad = String((a as any).daterequested ?? '');
+              const bd = String((b as any).daterequested ?? '');
+              if (ad !== bd) return ad.localeCompare(bd);
+              return String((a as any).refcode ?? '').localeCompare(
+                String((b as any).refcode ?? '')
+              );
+            });
 
             const totalHours = tasks.reduce((sum, t) => sum + toNumber((t as any).hours), 0);
             const projectname = typeof p.projectname === 'string' ? p.projectname : undefined;

@@ -21,16 +21,15 @@ describe('AroFlo param normalization', () => {
   });
 
   it('splits concatenated WHERE clauses into repeated params', () => {
-    expect(
-      normalizeWhereParam('and|clientid|=|ABC123|and|daterequested|>|2025/01/01')
-    ).toEqual(['and|clientid|=|ABC123', 'and|daterequested|>|2025/01/01']);
+    expect(normalizeWhereParam('and|clientid|=|ABC123|and|daterequested|>|2025/01/01')).toEqual([
+      'and|clientid|=|ABC123',
+      'and|daterequested|>|2025/01/01'
+    ]);
   });
 
   it('leaves ambiguous WHERE strings untouched', () => {
     // Not a clean multiple of 4 tokens, so we keep the original.
-    expect(normalizeWhereParam('and|field|=|a|b|and|x|=|y')).toEqual([
-      'and|field|=|a|b|and|x|=|y'
-    ]);
+    expect(normalizeWhereParam('and|field|=|a|b|and|x|=|y')).toEqual(['and|field|=|a|b|and|x|=|y']);
   });
 
   it('splits comma-separated JOIN strings', () => {

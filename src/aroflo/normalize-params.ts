@@ -52,9 +52,12 @@ export function splitCombinedWhereClause(whereClause: string): string[] {
   if (tokens.length === 4) {
     const conj = tokens[0]?.trim();
     if (conj === 'and' || conj === 'or') {
-      const normalized = [tokens[0], tokens[1], tokens[2], normalizeDateLiteralToken(tokens[3] ?? '')].join(
-        '|'
-      );
+      const normalized = [
+        tokens[0],
+        tokens[1],
+        tokens[2],
+        normalizeDateLiteralToken(tokens[3] ?? '')
+      ].join('|');
       return [normalized];
     }
     return [trimmed];

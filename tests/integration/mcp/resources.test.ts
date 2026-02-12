@@ -64,8 +64,12 @@ describe('MCP resources', () => {
       expect(first.text).toContain('# Quotes');
       expect(first.text).toContain('acceptancestatus');
     } finally {
-      await Promise.allSettled([client.close(), server.close(), clientTransport.close(), serverTransport.close()]);
+      await Promise.allSettled([
+        client.close(),
+        server.close(),
+        clientTransport.close(),
+        serverTransport.close()
+      ]);
     }
   });
 });
-

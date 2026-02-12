@@ -55,14 +55,25 @@ export function extractZoneItems(zone: string, data: unknown): ExtractedItems {
 
   if (arrayKeys.length === 1) {
     const k = arrayKeys[0]!;
-    return { itemsKey: k, items: zr[k] as unknown[], pageNumber, currentPageResults, maxPageResults };
+    return {
+      itemsKey: k,
+      items: zr[k] as unknown[],
+      pageNumber,
+      currentPageResults,
+      maxPageResults
+    };
   }
 
   if (arrayKeys.length > 1) {
     const k = arrayKeys[0]!;
-    return { itemsKey: k, items: zr[k] as unknown[], pageNumber, currentPageResults, maxPageResults };
+    return {
+      itemsKey: k,
+      items: zr[k] as unknown[],
+      pageNumber,
+      currentPageResults,
+      maxPageResults
+    };
   }
 
   return { items: [], pageNumber, currentPageResults, maxPageResults };
 }
-

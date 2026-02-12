@@ -10,10 +10,7 @@ export function getZoneResponse(data: unknown): Record<string, unknown> | undefi
   return isRecord(zr) ? zr : undefined;
 }
 
-export function withZoneResponseMeta(
-  data: unknown,
-  meta: Record<string, unknown>
-): unknown {
+export function withZoneResponseMeta(data: unknown, meta: Record<string, unknown>): unknown {
   if (!isRecord(data)) {
     return data;
   }
