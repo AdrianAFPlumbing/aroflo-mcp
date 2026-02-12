@@ -9,7 +9,12 @@ import {
   normalizeWhereParam
 } from '../../aroflo/normalize-params.js';
 import { validateWhereOrThrow } from '../../aroflo/where-validation.js';
-import { mergeZoneResponseData, truncateZoneArrays } from '../../aroflo/paginate.js';
+import {
+  mergeZoneResponseData,
+  truncateZoneArrays,
+  withDebug,
+  withZoneResponseMeta
+} from '../../aroflo/paginate.js';
 import { compactZoneResponseData } from '../../aroflo/select.js';
 import { buildZoneDataEnvelope, resolveOutputMode } from '../output.js';
 import { AROFLO_ZONES, zoneToToolSuffix } from '../../aroflo/zones.js';
@@ -60,7 +65,9 @@ export function registerZoneGetTools(server: McpServer, client: AroFloClient): v
           `Set compact=true and optionally select=[\"field\",\"nested.field\"] to reduce payload size. ` +
           `See resource "aroflo://docs/api/<slug>" (example: "aroflo://docs/api/quotes") for valid fields/values.`,
         inputSchema,
-        outputSchema: z.any(),
+        // MCP SDK expects output schemas to be object schemas (or raw object shapes).
+        // `z.any()` causes output validation to crash under the current SDK.
+        outputSchema: z.object({}).passthrough(),
         annotations: {
           readOnlyHint: true,
           idempotentHint: true,
@@ -69,6 +76,8 @@ export function registerZoneGetTools(server: McpServer, client: AroFloClient): v
       },
       async (args) => {
         const mode = resolveOutputMode(args);
+        const envelopeRequested =
+          typeof args.mode === 'string' || Boolean(args.raw) || Boolean(args.verbose);
         try {
           const where = normalizeWhereParam(args.where);
           const order = normalizeOrderParam(args.order);
@@ -211,6 +220,25 @@ export function registerZoneGetTools(server: McpServer, client: AroFloClient): v
               maxItems: args.maxItems
             });
             effectiveResponse = { ...response, data: compactedData };
+          }
+
+          // Backward compatible default: return the full AroFlo client response, optionally
+          // annotated with pagination/debug metadata. The new minimal envelope is opt-in via
+          // args.mode / args.verbose / args.raw.
+          if (!envelopeRequested) {
+            let finalData: unknown = effectiveResponse.data;
+            if (autoPaginate || truncated) {
+              finalData = withZoneResponseMeta(finalData, {
+                pagesFetched,
+                truncated,
+                truncatedReason,
+                nextPage
+              });
+            }
+            if (debugInfo) {
+              finalData = withDebug(finalData, debugInfo);
+            }
+            return successToolResult({ ...effectiveResponse, data: finalData });
           }
 
           const out = buildZoneDataEnvelope({

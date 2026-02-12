@@ -88,7 +88,9 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
         debug: z.boolean().optional()
       },
       // Keep the existing generic output schema; data is free-form.
-      outputSchema: z.any(),
+      // MCP SDK expects output schemas to be object schemas (or raw object shapes).
+      // `z.any()` causes output validation to crash under the current SDK.
+      outputSchema: z.object({}).passthrough(),
       annotations: {
         readOnlyHint: true,
         idempotentHint: true,
@@ -238,7 +240,9 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
         verbose: z.boolean().optional(),
         debug: z.boolean().optional()
       },
-      outputSchema: z.any(),
+      // MCP SDK expects output schemas to be object schemas (or raw object shapes).
+      // `z.any()` causes output validation to crash under the current SDK.
+      outputSchema: z.object({}).passthrough(),
       annotations: {
         readOnlyHint: true,
         idempotentHint: true,
@@ -529,7 +533,9 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
         verbose: z.boolean().optional(),
         debug: z.boolean().optional()
       },
-      outputSchema: z.any(),
+      // MCP SDK expects output schemas to be object schemas (or raw object shapes).
+      // `z.any()` causes output validation to crash under the current SDK.
+      outputSchema: z.object({}).passthrough(),
       annotations: {
         readOnlyHint: true,
         idempotentHint: true,

@@ -22,7 +22,9 @@ export function registerMutateRecordTool(server: McpServer, client: AroFloClient
       title: 'AroFlo: Create/Update Record',
       description: 'Create or update a record in AroFlo using zone + postxml.',
       inputSchema,
-      outputSchema: z.any(),
+      // MCP SDK expects output schemas to be object schemas (or raw object shapes).
+      // `z.any()` causes output validation to crash under the current SDK.
+      outputSchema: z.object({}).passthrough(),
       annotations: {
         destructiveHint: true,
         openWorldHint: true
@@ -30,8 +32,13 @@ export function registerMutateRecordTool(server: McpServer, client: AroFloClient
     },
     async (args) => {
       const mode = resolveOutputMode(args);
+      const envelopeRequested =
+        typeof args.mode === 'string' || Boolean(args.raw) || Boolean(args.verbose);
       try {
         const response = await client.post(args.zone, args.postxml, { extra: args.extra });
+        if (!envelopeRequested) {
+          return successToolResult(response);
+        }
         const out = buildMutationEnvelope({
           zone: args.zone,
           response,

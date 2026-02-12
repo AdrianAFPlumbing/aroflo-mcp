@@ -29,7 +29,9 @@ export function registerGetRecordTool(server: McpServer, client: AroFloClient): 
         'Fetch one specific AroFlo record by zone and ID field/value. ' +
         'Use extraWhere for additional pipe-delimited clauses like "and|archived|=|false".',
       inputSchema,
-      outputSchema: z.any(),
+      // MCP SDK expects output schemas to be object schemas (or raw object shapes).
+      // `z.any()` causes output validation to crash under the current SDK.
+      outputSchema: z.object({}).passthrough(),
       annotations: {
         readOnlyHint: true,
         idempotentHint: true,
@@ -38,6 +40,8 @@ export function registerGetRecordTool(server: McpServer, client: AroFloClient): 
     },
     async (args) => {
       const mode = resolveOutputMode(args);
+      const envelopeRequested =
+        typeof args.mode === 'string' || Boolean(args.raw) || Boolean(args.verbose);
       try {
         const extraWhere =
           typeof args.extraWhere === 'string' ? [args.extraWhere] : args.extraWhere;
@@ -48,6 +52,10 @@ export function registerGetRecordTool(server: McpServer, client: AroFloClient): 
           page: 1,
           pageSize: 1
         });
+
+        if (!envelopeRequested) {
+          return successToolResult(response);
+        }
 
         const out = buildZoneDataEnvelope({
           zone: args.zone,

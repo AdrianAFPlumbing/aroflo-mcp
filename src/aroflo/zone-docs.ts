@@ -19,14 +19,18 @@ function parseWhereFields(markdown: string): Set<string> {
   let inWhere = false;
   for (const line of lines) {
     const trimmed = line.trim();
+    const heading = trimmed.toLowerCase();
 
-    if (trimmed.startsWith('## ') && trimmed !== '## WHERE filters') {
+    // Some extracted docs use "## WHERE", most use "## WHERE filters".
+    const isWhereHeading = heading === '## where filters' || heading === '## where';
+
+    if (trimmed.startsWith('## ') && !isWhereHeading) {
       if (inWhere) {
         break;
       }
     }
 
-    if (trimmed === '## WHERE filters') {
+    if (isWhereHeading) {
       inWhere = true;
       continue;
     }
@@ -43,7 +47,8 @@ function parseWhereFields(markdown: string): Set<string> {
     const parts = trimmed.split('|').map((p) => p.trim());
     // parts looks like: ["", "Field", "Value", ""]
     const field = parts[1]?.toLowerCase();
-    if (!field || field === 'field' || field === '---') {
+    // Common header labels vary across zones (e.g. "TERM" for TransactionTerms).
+    if (!field || field === 'field' || field === 'term' || field === '---') {
       continue;
     }
     out.add(field);
@@ -59,14 +64,18 @@ function parseJoinAreas(markdown: string): Set<string> {
   let inJoin = false;
   for (const line of lines) {
     const trimmed = line.trim();
+    const heading = trimmed.toLowerCase();
 
-    if (trimmed.startsWith('## ') && trimmed !== '## JOINs available') {
+    // Some extracted docs use "## JOINs", most use "## JOINs available".
+    const isJoinHeading = heading === '## joins available' || heading === '## joins';
+
+    if (trimmed.startsWith('## ') && !isJoinHeading) {
       if (inJoin) {
         break;
       }
     }
 
-    if (trimmed === '## JOINs available') {
+    if (isJoinHeading) {
       inJoin = true;
       continue;
     }

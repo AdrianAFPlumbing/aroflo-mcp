@@ -61,6 +61,27 @@ export function errorToolResult(
             retryable
           };
 
+  // Backward compatible top-level fields (pre-envelope refactor).
+  const legacyStructured =
+    error instanceof AroFloError
+      ? {
+          code: error.code,
+          message: error.message,
+          statusCode: error.statusCode,
+          status: error.status,
+          ...(includeDetails ? { details: error.details } : {})
+        }
+      : error instanceof Error
+        ? {
+            code: 'UNEXPECTED_ERROR',
+            name: error.name,
+            message: error.message
+          }
+        : {
+            code: 'UNEXPECTED_ERROR',
+            message: 'Unknown error'
+          };
+
   const detailsText =
     error instanceof AroFloError
       ? `${error.message} [code=${error.code}${
@@ -70,7 +91,7 @@ export function errorToolResult(
         ? error.message
         : 'Unknown error';
 
-  const structured: Record<string, unknown> = { error: errorObj };
+  const structured: Record<string, unknown> = { ...legacyStructured, error: errorObj };
   if (includeDebug && options?.debug) {
     structured.debug = options.debug;
   }

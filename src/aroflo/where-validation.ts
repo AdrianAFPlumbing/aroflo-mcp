@@ -32,6 +32,11 @@ export async function validateWhereOrThrow(options: ValidateWhereOptions): Promi
   if (!doc) {
     return;
   }
+  // Fail open if docs were extracted but no WHERE field table could be parsed.
+  // This avoids regressions for zones whose docs deviate from the expected format.
+  if (doc.whereFields.size === 0) {
+    return;
+  }
 
   const invalid: string[] = [];
   for (const clause of where) {
