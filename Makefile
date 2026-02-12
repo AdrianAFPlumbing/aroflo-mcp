@@ -20,6 +20,8 @@ codex-install: install ## Install + register the server in Codex (stdio). Loads 
 		: "$${AROFLO_UENCODED?Missing AROFLO_UENCODED}"; \
 		: "$${AROFLO_PENCODED?Missing AROFLO_PENCODED}"; \
 		: "$${AROFLO_ORG_ENCODED?Missing AROFLO_ORG_ENCODED}"; \
+		NODE_BIN="$$(command -v node)"; \
+		SERVER_ENTRY="$$(pwd)/dist/mcp/server.js"; \
 		codex mcp remove aroflo >/dev/null 2>&1 || true; \
 		codex mcp add aroflo \
 			--env "AROFLO_API_BASE_URL=$${AROFLO_API_BASE_URL:-https://api.aroflo.com/}" \
@@ -29,7 +31,7 @@ codex-install: install ## Install + register the server in Codex (stdio). Loads 
 			--env "AROFLO_PENCODED=$${AROFLO_PENCODED}" \
 			--env "AROFLO_ORG_ENCODED=$${AROFLO_ORG_ENCODED}" \
 			--env "MCP_TRANSPORT=stdio" \
-			-- aroflo-mcp >/dev/null; \
+			-- "$${NODE_BIN}" "$${SERVER_ENTRY}" >/dev/null; \
 		codex mcp get aroflo
 
 deps: ## Install dependencies (uses package-lock.json)

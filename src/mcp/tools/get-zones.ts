@@ -7,10 +7,12 @@ import { arofloToolOutputSchema, errorToolResult, successToolResult } from './sh
 
 const queryValueSchema = z.union([z.string(), z.number(), z.boolean()]);
 
+const stringOrStringArraySchema = z.union([z.string().min(1), z.array(z.string().min(1))]);
+
 const inputSchema = {
-  where: z.array(z.string().min(1)).optional(),
-  order: z.array(z.string().min(1)).optional(),
-  join: z.array(z.string().min(1)).optional(),
+  where: stringOrStringArraySchema.optional(),
+  order: stringOrStringArraySchema.optional(),
+  join: stringOrStringArraySchema.optional(),
   page: z.number().int().positive().optional(),
   pageSize: z.number().int().positive().max(500).optional(),
   extra: z.record(z.string(), queryValueSchema).optional()
@@ -28,7 +30,9 @@ export function registerZoneGetTools(server: McpServer, client: AroFloClient): v
       toolName,
       {
         title: `AroFlo: Get ${zone}`,
-        description: `Query the AroFlo ${zone} zone (GET).`,
+        description:
+          `Query the AroFlo ${zone} zone (GET). ` +
+          `Use pipe-delimited WHERE clauses like "and|field|=|value", ORDER clauses like "field|asc", and JOIN areas like "lineitems".`,
         inputSchema,
         outputSchema: arofloToolOutputSchema,
         annotations: {
@@ -39,10 +43,14 @@ export function registerZoneGetTools(server: McpServer, client: AroFloClient): v
       },
       async (args) => {
         try {
+          const where = typeof args.where === 'string' ? [args.where] : args.where;
+          const order = typeof args.order === 'string' ? [args.order] : args.order;
+          const join = typeof args.join === 'string' ? [args.join] : args.join;
+
           const response = await client.get(zone, {
-            where: args.where,
-            order: args.order,
-            join: args.join,
+            where,
+            order,
+            join,
             page: args.page,
             pageSize: args.pageSize,
             extra: args.extra

@@ -1,5 +1,27 @@
 # MCP Tools
 
+## WHERE / ORDER / JOIN Syntax
+
+AroFlo query filters are pipe-delimited strings:
+
+- `where`: `and|field|=|value` (repeat for multiple clauses)
+- `order`: `field|asc` or `field|desc`
+- `join`: `area` (repeat for multiple joins)
+
+In this MCP server, `where`, `order`, and `join` can be passed as either a single string or an array of strings.
+
+Example: list Quotes with acceptance status "Awaiting Decision":
+
+Tool: `aroflo_get_quotes`
+
+```json
+{
+  "where": "and|acceptancestatus|=|Awaiting Decision",
+  "page": 1,
+  "pageSize": 50
+}
+```
+
 ## `aroflo_get_lastupdate`
 
 Query the `lastupdate` zone with optional zone and date filters.
