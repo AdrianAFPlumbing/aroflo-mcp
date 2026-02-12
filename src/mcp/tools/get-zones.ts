@@ -32,7 +32,8 @@ export function registerZoneGetTools(server: McpServer, client: AroFloClient): v
         title: `AroFlo: Get ${zone}`,
         description:
           `Query the AroFlo ${zone} zone (GET). ` +
-          `Use pipe-delimited WHERE clauses like "and|field|=|value", ORDER clauses like "field|asc", and JOIN areas like "lineitems".`,
+          `Use pipe-delimited WHERE clauses like "and|field|=|value", ORDER clauses like "field|asc", and JOIN areas like "lineitems". ` +
+          `See resource "aroflo://docs/api/<slug>" (example: "aroflo://docs/api/quotes") for valid fields/values.`,
         inputSchema,
         outputSchema: arofloToolOutputSchema,
         annotations: {

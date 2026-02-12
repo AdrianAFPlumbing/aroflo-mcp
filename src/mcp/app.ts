@@ -3,6 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { AroFloClient } from '../aroflo/client.js';
 import { AroFloClient as AroFloClientImpl } from '../aroflo/client.js';
 import type { AppEnv } from '../config.js';
+import { registerApiDocsResources } from './resources/api-docs.js';
 import { registerGetLastUpdateTool } from './tools/get-lastupdate.js';
 import { registerQueryZoneTool } from './tools/query-zone.js';
 import { registerGetRecordTool } from './tools/get-record.js';
@@ -36,6 +37,7 @@ export function createAroFloMcpServer(client: AroFloClient): McpServer {
   registerGetRecordTool(server, client);
   registerMutateRecordTool(server, client);
   registerZoneGetTools(server, client);
+  registerApiDocsResources(server);
 
   return server;
 }

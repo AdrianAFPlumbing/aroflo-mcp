@@ -23,7 +23,8 @@ export function registerQueryZoneTool(server: McpServer, client: AroFloClient): 
       title: 'AroFlo: Query Zone',
       description:
         'Query an arbitrary AroFlo zone using WHERE/ORDER/JOIN clauses. ' +
-        'Use pipe-delimited WHERE clauses like "and|field|=|value", ORDER clauses like "field|asc", and JOIN areas like "lineitems".',
+        'Use pipe-delimited WHERE clauses like "and|field|=|value", ORDER clauses like "field|asc", and JOIN areas like "lineitems". ' +
+        'See resource "aroflo://docs/api" for the extracted zone docs.',
       inputSchema,
       outputSchema: arofloToolOutputSchema,
       annotations: {
