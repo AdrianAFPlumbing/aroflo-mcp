@@ -115,9 +115,19 @@ Notes:
 
 Higher-level tools that encode common AroFlo quirks:
 
+- `aroflo_resolve_job_context`
 - `aroflo_list_open_projects`
 - `aroflo_list_project_tasks_with_hours`
 - `aroflo_report_open_projects_with_task_hours`
+
+Resolve a job context (jobnumber + related task(s), quote(s), and project) when you only have a partial identifier:
+
+```json
+{
+  "jobNumber": 7344,
+  "mode": "data"
+}
+```
 
 Example: report open projects with labour hours per task (grouped by project):
 

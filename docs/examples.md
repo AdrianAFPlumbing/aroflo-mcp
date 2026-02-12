@@ -52,6 +52,17 @@ Notes:
 
 ## Open Projects + Labour Hours (Report Tools)
 
+Resolve a job context (jobnumber + task(s) + quote(s) + project):
+
+- Tool: `aroflo_resolve_job_context`
+
+```json
+{
+  "jobNumber": 7344,
+  "mode": "data"
+}
+```
+
 List open projects (client-side filtering on `status=="open"` + `closeddate==""`):
 
 - Tool: `aroflo_list_open_projects`
