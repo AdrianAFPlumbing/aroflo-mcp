@@ -10,6 +10,15 @@ AroFlo query filters are pipe-delimited strings:
 
 In this MCP server, `where`, `order`, and `join` can be passed as either a single string or an array of strings.
 
+Additional optional helpers on GET tools:
+
+- `autoPaginate`: fetches subsequent pages and merges `zoneresponse` arrays client-side
+- `maxResults` / `maxItemsTotal`: cap total merged items; returns `_mcp.truncated=true` + `_mcp.nextPage` when hit
+- `maxPages`: cap page fetches when auto-paginating
+- `compact`, `select`, `maxItems`: reduce payload size (see below)
+- `validateWhere` (default true): validates WHERE fields against extracted zone docs and fails fast with a targeted message
+- `debug`: adds `_debug` metadata showing normalized query inputs
+
 Example: list Quotes with acceptance status "Awaiting Decision":
 
 Tool: `aroflo_get_quotes`
@@ -61,3 +70,11 @@ In addition to the generic tools above, this server registers convenience GET to
 Notes:
 
 - `LastUpdate` has a dedicated tool (`aroflo_get_lastupdate`) with a richer input schema.
+
+## Report Tools
+
+Higher-level tools that encode common AroFlo quirks:
+
+- `aroflo_list_open_projects`
+- `aroflo_list_project_tasks_with_hours`
+- `aroflo_report_open_projects_with_task_hours`

@@ -384,5 +384,249 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
       }
     }
   );
-}
 
+  server.registerTool(
+    'aroflo_report_open_projects_with_task_hours',
+    {
+      title: 'AroFlo: Report Open Projects With Task Hours',
+      description:
+        'Report open projects (status=open, closeddate empty) and their tasks with total labour hours. ' +
+        'Internally fetches Projects then Tasks (join project + tasktotals) and returns a compact grouped output.',
+      inputSchema: {
+        sinceCreatedUtc: z.string().min(1).optional(),
+        orgId: z.string().min(1).optional(),
+        managerUserId: z.string().min(1).optional(),
+        sinceDateRequested: z.string().min(1).optional(),
+        sinceTaskCreatedUtc: z.string().min(1).optional(),
+        includeTasksWithoutProject: z.boolean().default(false),
+        pageSize: z.number().int().positive().max(500).default(200),
+        maxProjects: z.number().int().positive().max(5000).default(2000),
+        maxTasksPerClient: z.number().int().positive().max(5000).default(2000),
+        debug: z.boolean().optional()
+      },
+      outputSchema: z.any(),
+      annotations: {
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: true
+      }
+    },
+    async (args) => {
+      try {
+        const whereClauses: string[] = [];
+        if (args.orgId) {
+          whereClauses.push(`and|orgid|=|${args.orgId}`);
+        }
+        if (args.sinceCreatedUtc) {
+          whereClauses.push(`and|createdutc|>|${args.sinceCreatedUtc}`);
+        }
+        const where = normalizeWhereParam(whereClauses);
+
+        const pageSize = args.pageSize;
+        const maxProjects = args.maxProjects;
+
+        let projectsResponse = await client.get('Projects', { where, page: 1, pageSize });
+        let pagesFetchedProjects = 1;
+        while (true) {
+          const projects = getProjectsArray(projectsResponse.data);
+          if (projects.length >= maxProjects) {
+            projectsResponse = {
+              ...projectsResponse,
+              data: truncateZoneArrays(projectsResponse.data, maxProjects).truncated
+            };
+            break;
+          }
+          if (projects.length < pageSize) {
+            break;
+          }
+          const nextPage = pagesFetchedProjects + 1;
+          const next = await client.get('Projects', { where, page: nextPage, pageSize });
+          const nextProjects = getProjectsArray(next.data);
+          if (nextProjects.length === 0) {
+            break;
+          }
+          projectsResponse = {
+            ...projectsResponse,
+            data: mergeZoneResponseData(projectsResponse.data, next.data).merged
+          };
+          pagesFetchedProjects += 1;
+          if (nextProjects.length < pageSize) {
+            break;
+          }
+        }
+
+        const allProjects = getProjectsArray(projectsResponse.data);
+        const openProjects = pickOpenProjects(allProjects, args.managerUserId);
+
+        const openProjectIds = new Set<string>();
+        const clientIds = new Set<string>();
+
+        for (const p of openProjects) {
+          if (!isRecord(p)) continue;
+          const pid = typeof p.projectid === 'string' ? p.projectid : '';
+          if (pid) openProjectIds.add(pid);
+          const c = p.client;
+          const cid = isRecord(c) && typeof c.orgid === 'string' ? c.orgid : '';
+          if (cid) clientIds.add(cid);
+        }
+
+        const tasksByProject: Record<string, any[]> = {};
+        for (const pid of openProjectIds) {
+          tasksByProject[pid] = [];
+        }
+        const unassignedByClient: Record<string, any[]> = {};
+
+        const perClientMeta: Record<string, unknown> = {};
+
+        for (const clientId of clientIds) {
+          const taskWhere: string[] = [`and|clientid|=|${clientId}`];
+          if (args.sinceDateRequested) {
+            taskWhere.push(`and|daterequested|>|${args.sinceDateRequested}`);
+          }
+          if (args.sinceTaskCreatedUtc) {
+            taskWhere.push(`and|createdutc|>|${args.sinceTaskCreatedUtc}`);
+          }
+
+          const normalizedTaskWhere = normalizeWhereParam(taskWhere);
+
+          let tasksResponse = await client.get('Tasks', {
+            where: normalizedTaskWhere,
+            join: ['project', 'tasktotals'],
+            order: ['daterequested|desc'],
+            page: 1,
+            pageSize
+          });
+
+          let pagesFetchedTasks = 1;
+          while (true) {
+            const tasks = getTasksArray(tasksResponse.data);
+            if (tasks.length >= args.maxTasksPerClient) {
+              tasksResponse = {
+                ...tasksResponse,
+                data: truncateZoneArrays(tasksResponse.data, args.maxTasksPerClient).truncated
+              };
+              break;
+            }
+            if (tasks.length < pageSize) {
+              break;
+            }
+            const nextPage = pagesFetchedTasks + 1;
+            const next = await client.get('Tasks', {
+              where: normalizedTaskWhere,
+              join: ['project', 'tasktotals'],
+              order: ['daterequested|desc'],
+              page: nextPage,
+              pageSize
+            });
+            const nextTasks = getTasksArray(next.data);
+            if (nextTasks.length === 0) {
+              break;
+            }
+            tasksResponse = {
+              ...tasksResponse,
+              data: mergeZoneResponseData(tasksResponse.data, next.data).merged
+            };
+            pagesFetchedTasks += 1;
+            if (nextTasks.length < pageSize) {
+              break;
+            }
+          }
+
+          const tasks = getTasksArray(tasksResponse.data).filter(isRecord);
+          let matched = 0;
+          let unassigned = 0;
+
+          for (const t of tasks) {
+            const proj = t.project;
+            const joinedProjectId =
+              isRecord(proj) && typeof proj.projectid === 'string' ? proj.projectid : undefined;
+            const rawProjectId = typeof t.projectid === 'string' ? t.projectid : undefined;
+            const projectId = joinedProjectId ?? rawProjectId;
+
+            const totals = t.tasktotals;
+            const totalhrs = isRecord(totals) ? toNumber(totals.totalhrs) : 0;
+
+            const mapped = {
+              taskid: t.taskid,
+              jobnumber: t.jobnumber,
+              refcode: t.refcode,
+              taskname: t.taskname,
+              status: t.status,
+              daterequested: t.daterequested,
+              createdutc: t.createdutc,
+              totalhrs
+            };
+
+            if (projectId && openProjectIds.has(projectId)) {
+              tasksByProject[projectId]!.push(mapped);
+              matched += 1;
+              continue;
+            }
+
+            if (args.includeTasksWithoutProject) {
+              if (!unassignedByClient[clientId]) unassignedByClient[clientId] = [];
+              unassignedByClient[clientId]!.push(mapped);
+              unassigned += 1;
+            }
+          }
+
+          perClientMeta[clientId] = {
+            pagesFetched: pagesFetchedTasks,
+            totalTasksFetched: tasks.length,
+            matched,
+            unassigned
+          };
+        }
+
+        const projects = openProjects
+          .filter(isRecord)
+          .map((p) => {
+            const pid = p.projectid as string;
+            const tasks = tasksByProject[pid] ?? [];
+            const totalHours = tasks.reduce((sum, t) => sum + toNumber(t.totalhrs), 0);
+            const projectname = typeof p.projectname === 'string' ? p.projectname : undefined;
+            return {
+              projectid: pid,
+              projectname,
+              refno: p.refno,
+              status: p.status,
+              startdate: p.startdate,
+              enddate: p.enddate,
+              closeddate: p.closeddate,
+              client: p.client,
+              manageruser: p.manageruser,
+              totalHours,
+              tasks
+            };
+          })
+          .sort((a, b) => String(a.projectname ?? '').localeCompare(String(b.projectname ?? '')));
+
+        const payload: Record<string, unknown> = {
+          projects,
+          meta: {
+            projectsFetched: allProjects.length,
+            openProjects: openProjects.length,
+            pagesFetchedProjects,
+            clientsQueried: Array.from(clientIds),
+            perClient: perClientMeta
+          }
+        };
+
+        if (args.includeTasksWithoutProject) {
+          payload.unassignedTasksByClient = unassignedByClient;
+        }
+
+        if (args.debug) {
+          payload.debug = { whereProjects: where };
+        }
+
+        return {
+          structuredContent: payload,
+          content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }]
+        };
+      } catch (error) {
+        return errorToolResult(error);
+      }
+    }
+  );
+}

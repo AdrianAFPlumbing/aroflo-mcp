@@ -19,12 +19,10 @@ function toArray(input?: StringOrStringArray): string[] {
   return input ?? [];
 }
 
-function normalizeDateLiterals(value: string): string {
-  // AroFlo docs say YYYY-MM-DD, but many tenants accept/emit YYYY/MM/DD.
-  // Normalize ISO-like date literals to slash format to reduce query failures.
-  // Example: "2025-06-30" -> "2025/06/30"
-  // Example: "2025-06-30 12:00:00" -> "2025/06/30 12:00:00"
-  return value.replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, '$1/$2/$3');
+function normalizeDateLiteralToken(token: string): string {
+  // Only rewrite when the token itself clearly begins with a date literal.
+  // This prevents surprising rewrites inside arbitrary strings.
+  return token.replace(/^(\d{4})-(\d{2})-(\d{2})(?=\b|\s)/, '$1/$2/$3');
 }
 
 function splitCommaList(value: string): string[] {
@@ -51,23 +49,38 @@ export function splitCombinedWhereClause(whereClause: string): string[] {
   }
 
   const tokens = trimmed.split('|');
-  if (tokens.length <= 4) {
-    return [normalizeDateLiterals(trimmed)];
+  if (tokens.length === 4) {
+    const conj = tokens[0]?.trim();
+    if (conj === 'and' || conj === 'or') {
+      const normalized = [tokens[0], tokens[1], tokens[2], normalizeDateLiteralToken(tokens[3] ?? '')].join(
+        '|'
+      );
+      return [normalized];
+    }
+    return [trimmed];
+  }
+  if (tokens.length < 4) {
+    return [trimmed];
   }
 
   // AroFlo WHERE clauses are generally: (and|or)|field|op|value
   if (tokens.length % 4 !== 0) {
-    return [normalizeDateLiterals(trimmed)];
+    return [trimmed];
   }
 
   const out: string[] = [];
   for (let i = 0; i < tokens.length; i += 4) {
     const conj = tokens[i]?.trim();
     if (conj !== 'and' && conj !== 'or') {
-      return [normalizeDateLiterals(trimmed)];
+      return [trimmed];
     }
     out.push(
-      normalizeDateLiterals([tokens[i], tokens[i + 1], tokens[i + 2], tokens[i + 3]].join('|'))
+      [
+        tokens[i],
+        tokens[i + 1],
+        tokens[i + 2],
+        normalizeDateLiteralToken(tokens[i + 3] ?? '')
+      ].join('|')
     );
   }
 

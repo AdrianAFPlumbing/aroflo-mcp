@@ -7,6 +7,7 @@ import {
   normalizeOrderParam,
   normalizeWhereParam
 } from '../../aroflo/normalize-params.js';
+import { validateWhereOrThrow } from '../../aroflo/where-validation.js';
 import {
   countZoneArrays,
   getZoneResponse,
@@ -30,7 +31,10 @@ const inputSchema = {
   page: z.number().int().positive().optional(),
   pageSize: z.number().int().positive().max(500).optional(),
   autoPaginate: z.boolean().optional(),
+  maxPages: z.number().int().positive().max(200).optional(),
   maxResults: z.number().int().positive().max(5000).optional(),
+  maxItemsTotal: z.number().int().positive().max(5000).optional(),
+  validateWhere: z.boolean().optional(),
   debug: z.boolean().optional(),
   compact: z.boolean().optional(),
   select: z.array(z.string().min(1)).optional(),
@@ -70,10 +74,20 @@ export function registerZoneGetTools(server: McpServer, client: AroFloClient): v
           const order = normalizeOrderParam(args.order);
           const join = normalizeJoinParam(args.join);
 
+          if (args.validateWhere !== false) {
+            await validateWhereOrThrow({ zone, where });
+          }
+
           const autoPaginate = Boolean(args.autoPaginate);
           const startPage = args.page ?? 1;
           const pageSize = args.pageSize ?? (autoPaginate ? 200 : undefined);
-          const maxResults = args.maxResults;
+          const maxResultsRaw =
+            typeof args.maxItemsTotal === 'number' ? args.maxItemsTotal : args.maxResults;
+          const maxResults =
+            typeof args.maxResults === 'number' && typeof args.maxItemsTotal === 'number'
+              ? Math.min(args.maxResults, args.maxItemsTotal)
+              : maxResultsRaw;
+          const maxPages = args.maxPages ?? (autoPaginate ? 25 : undefined);
 
           const debugInfo: Record<string, unknown> | undefined = args.debug
             ? {
@@ -100,22 +114,34 @@ export function registerZoneGetTools(server: McpServer, client: AroFloClient): v
 
           let pagesFetched = 1;
           let truncated = false;
+          let truncatedReason: string | undefined;
           let nextPage: number | undefined;
 
           if (autoPaginate) {
             let currentPage = startPage;
+            let lastPageCount = (() => {
+              const zr = getZoneResponse(response.data);
+              return zr ? countZoneArrays(zr) : 0;
+            })();
             while (true) {
               const zr = getZoneResponse(response.data);
               const total = zr ? countZoneArrays(zr) : 0;
 
               if (typeof maxResults === 'number' && total >= maxResults) {
                 truncated = true;
+                truncatedReason = 'maxResults';
                 nextPage = currentPage + 1;
                 break;
               }
 
-              const mainArrayLen = zr ? total : 0;
-              if (typeof pageSize === 'number' && mainArrayLen < pageSize) {
+              if (typeof maxPages === 'number' && pagesFetched >= maxPages) {
+                truncated = true;
+                truncatedReason = 'maxPages';
+                nextPage = currentPage + 1;
+                break;
+              }
+
+              if (typeof pageSize === 'number' && lastPageCount < pageSize) {
                 break;
               }
 
@@ -129,8 +155,6 @@ export function registerZoneGetTools(server: McpServer, client: AroFloClient): v
                 extra: args.extra
               });
 
-              pagesFetched += 1;
-
               // If the next page contributes nothing, stop.
               const nextZr = getZoneResponse(next.data);
               const nextCount = nextZr ? countZoneArrays(nextZr) : 0;
@@ -139,6 +163,8 @@ export function registerZoneGetTools(server: McpServer, client: AroFloClient): v
               }
 
               response = { ...response, data: mergeZoneResponseData(response.data, next.data).merged };
+              pagesFetched += 1;
+              lastPageCount = nextCount;
 
               // Stop if the last page was short.
               if (typeof pageSize === 'number' && nextCount < pageSize) {
@@ -154,6 +180,7 @@ export function registerZoneGetTools(server: McpServer, client: AroFloClient): v
               const { truncated: newData } = truncateZoneArrays(response.data, maxResults);
               response = { ...response, data: newData };
               truncated = true;
+              truncatedReason = truncatedReason ?? 'maxResults';
             }
           }
 
@@ -184,7 +211,12 @@ export function registerZoneGetTools(server: McpServer, client: AroFloClient): v
             });
             let finalData: unknown = compactedData;
             if (autoPaginate || truncated) {
-              finalData = withZoneResponseMeta(finalData, { pagesFetched, truncated, nextPage });
+              finalData = withZoneResponseMeta(finalData, {
+                pagesFetched,
+                truncated,
+                truncatedReason,
+                nextPage
+              });
             }
             if (debugInfo) {
               finalData = withDebug(finalData, debugInfo);
@@ -196,7 +228,12 @@ export function registerZoneGetTools(server: McpServer, client: AroFloClient): v
           if (autoPaginate || debugInfo || truncated) {
             let finalData: unknown = response.data;
             if (autoPaginate || truncated) {
-              finalData = withZoneResponseMeta(finalData, { pagesFetched, truncated, nextPage });
+              finalData = withZoneResponseMeta(finalData, {
+                pagesFetched,
+                truncated,
+                truncatedReason,
+                nextPage
+              });
             }
             if (debugInfo) {
               finalData = withDebug(finalData, debugInfo);

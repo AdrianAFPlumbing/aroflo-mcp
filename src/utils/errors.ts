@@ -50,6 +50,13 @@ export class AroFloApiError extends AroFloError {
   }
 }
 
+export class AroFloWhereValidationError extends AroFloError {
+  constructor(message: string, options: Omit<AroFloErrorOptions, 'code'> = {}) {
+    super(message, { ...options, code: 'AROFLO_WHERE_VALIDATION' });
+    this.name = 'AroFloWhereValidationError';
+  }
+}
+
 export function isRetryableError(error: unknown): boolean {
   if (error instanceof AroFloRateLimitError) {
     return true;
