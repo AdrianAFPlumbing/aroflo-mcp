@@ -2,6 +2,11 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
 import type { AroFloClient } from '../../aroflo/client.js';
+import {
+  normalizeJoinParam,
+  normalizeOrderParam,
+  normalizeWhereParam
+} from '../../aroflo/normalize-params.js';
 import { AROFLO_ZONES, zoneToToolSuffix } from '../../aroflo/zones.js';
 import { arofloToolOutputSchema, errorToolResult, successToolResult } from './shared.js';
 
@@ -44,9 +49,9 @@ export function registerZoneGetTools(server: McpServer, client: AroFloClient): v
       },
       async (args) => {
         try {
-          const where = typeof args.where === 'string' ? [args.where] : args.where;
-          const order = typeof args.order === 'string' ? [args.order] : args.order;
-          const join = typeof args.join === 'string' ? [args.join] : args.join;
+          const where = normalizeWhereParam(args.where);
+          const order = normalizeOrderParam(args.order);
+          const join = normalizeJoinParam(args.join);
 
           const response = await client.get(zone, {
             where,

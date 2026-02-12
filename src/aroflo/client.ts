@@ -217,12 +217,21 @@ export class AroFloClient {
   ): never {
     const parsedStatus = this.coerceStatus(status);
     const message = statusMessage ?? `AroFlo request failed with HTTP ${httpStatus}`;
+    const messageLower = message.toLowerCase();
 
     if (parsedStatus === -99999 || message.toLowerCase().includes('authentication failed')) {
       throw new AroFloAuthError(message, { statusCode: httpStatus, status, details });
     }
 
-    if (parsedStatus === 6 || parsedStatus === 7 || parsedStatus === 429 || httpStatus === 429) {
+    // Treat explicit HTTP 429 (or a clearly rate-limit-related message) as retryable.
+    // Some AroFlo errors use non-zero "status" codes for validation problems (e.g. invalid WHERE);
+    // those should not be mapped to rate limits.
+    if (
+      httpStatus === 429 ||
+      parsedStatus === 429 ||
+      messageLower.includes('too many requests') ||
+      (messageLower.includes('rate') && messageLower.includes('limit'))
+    ) {
       throw new AroFloRateLimitError(message, { statusCode: httpStatus, status, details });
     }
 
