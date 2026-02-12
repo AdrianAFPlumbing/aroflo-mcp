@@ -10,6 +10,28 @@ install: deps build link ## Install globally as `aroflo-mcp` (via npm link)
 uninstall: ## Remove global `aroflo-mcp` (npm unlink)
 	@npm unlink -g aroflo-mcp >/dev/null 2>&1 || true
 
+codex-remove: ## Remove Codex MCP server config for `aroflo`
+	@codex mcp remove aroflo >/dev/null 2>&1 || true
+
+codex-install: install ## Install + register the server in Codex (stdio). Loads .env if present.
+	@set -euo pipefail; \
+		if [ -f .env ]; then set -a; source .env; set +a; fi; \
+		: "$${AROFLO_SECRET_KEY?Missing AROFLO_SECRET_KEY}"; \
+		: "$${AROFLO_UENCODED?Missing AROFLO_UENCODED}"; \
+		: "$${AROFLO_PENCODED?Missing AROFLO_PENCODED}"; \
+		: "$${AROFLO_ORG_ENCODED?Missing AROFLO_ORG_ENCODED}"; \
+		codex mcp remove aroflo >/dev/null 2>&1 || true; \
+		codex mcp add aroflo \
+			--env "AROFLO_API_BASE_URL=$${AROFLO_API_BASE_URL:-https://api.aroflo.com/}" \
+			--env "AROFLO_ACCEPT=$${AROFLO_ACCEPT:-text/json}" \
+			--env "AROFLO_SECRET_KEY=$${AROFLO_SECRET_KEY}" \
+			--env "AROFLO_UENCODED=$${AROFLO_UENCODED}" \
+			--env "AROFLO_PENCODED=$${AROFLO_PENCODED}" \
+			--env "AROFLO_ORG_ENCODED=$${AROFLO_ORG_ENCODED}" \
+			--env "MCP_TRANSPORT=stdio" \
+			-- aroflo-mcp >/dev/null; \
+		codex mcp get aroflo
+
 deps: ## Install dependencies (uses package-lock.json)
 	@npm install
 
