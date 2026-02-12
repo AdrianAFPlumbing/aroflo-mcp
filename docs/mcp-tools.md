@@ -10,6 +10,15 @@ AroFlo query filters are pipe-delimited strings:
 
 In this MCP server, `where`, `order`, and `join` can be passed as either a single string or an array of strings.
 
+Normalization helpers (designed to reduce common LLM failure modes):
+
+- Multi-clause `where` strings are split when unambiguous:
+  - `"and|a|=|1|and|b|>|2"` becomes `["and|a|=|1", "and|b|>|2"]`
+- ISO date literals in WHERE values are normalized:
+  - `"2025-06-30"` becomes `"2025/06/30"`
+- Comma-separated `join` strings are split:
+  - `"project,tasktotals"` becomes `["project", "tasktotals"]`
+
 Additional optional helpers on GET tools:
 
 - `autoPaginate`: fetches subsequent pages and merges `zoneresponse` arrays client-side
@@ -36,7 +45,11 @@ Tool: `aroflo_get_quotes`
 
 ## Response Shape (GET Tools)
 
-Default (`mode="data"`) response is intentionally small and stable:
+To opt into the small, stable response envelope, pass `mode` explicitly (for example `mode: "data"`).
+
+If you omit `mode`/`verbose`/`raw`, the zone GET tools return the raw AroFlo response payload for backward compatibility.
+
+Envelope (`mode="data"`) response is intentionally small and stable:
 
 ```json
 {
@@ -105,3 +118,15 @@ Higher-level tools that encode common AroFlo quirks:
 - `aroflo_list_open_projects`
 - `aroflo_list_project_tasks_with_hours`
 - `aroflo_report_open_projects_with_task_hours`
+
+Example: report open projects with labour hours per task (grouped by project):
+
+```json
+{
+  "sinceCreatedUtc": "2025-01-01",
+  "sinceDateRequested": "2025-01-01",
+  "hoursOnly": true,
+  "includeTaskStatus": true,
+  "mode": "data"
+}
+```

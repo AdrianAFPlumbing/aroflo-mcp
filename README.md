@@ -150,6 +150,21 @@ Example query: list Quotes with acceptance status \"Awaiting Decision\":
 }
 ```
 
+Example report: open projects with labour hours per task (recommended for progress reporting):
+
+- Tool: `aroflo_report_open_projects_with_task_hours`
+- Args (add optional filters like `sinceDateRequested` to keep outputs small):
+
+```json
+{
+  "sinceCreatedUtc": "2025-01-01",
+  "sinceDateRequested": "2025-01-01",
+  "hoursOnly": true,
+  "includeTaskStatus": true,
+  "mode": "data"
+}
+```
+
 ## Docs
 
 - `docs/aroflo-auth.md`

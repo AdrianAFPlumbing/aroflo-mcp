@@ -9,6 +9,90 @@ Tips:
 - `where`, `order`, and `join` accept either a single string or an array of strings.
 - WHERE clauses are pipe-delimited strings like `and|field|=|value`.
 
+## Recommended Defaults (Small Outputs)
+
+Most zone GET tools can return either:
+
+- a raw AroFlo response payload (legacy-compatible), or
+- a small stable envelope (recommended for LLM usage).
+
+To opt into the small envelope, set `mode: "data"` (or `"verbose"|"debug"|"raw"`).
+
+To reduce payload size further, set `compact: true` and optionally a `select` list.
+
+Example: list recent tasks with totals, using a compact payload and auto-pagination with a hard cap:
+
+- Tool: `aroflo_get_tasks`
+
+```json
+{
+  "where": ["and|daterequested|>|2025-06-30", "and|status|!=|completed"],
+  "join": "project,tasktotals",
+  "order": "daterequested|desc",
+  "autoPaginate": true,
+  "maxResults": 200,
+  "compact": true,
+  "select": [
+    "taskid",
+    "refcode",
+    "taskname",
+    "status",
+    "daterequested",
+    "project.projectname",
+    "tasktotals.totalhrs"
+  ],
+  "mode": "data"
+}
+```
+
+Notes:
+
+- Dates in WHERE can be `YYYY-MM-DD` or `YYYY/MM/DD`; the MCP normalizes to AroFlo's expected format.
+- `join` can be `"a,b"` or `["a","b"]` (comma-separated strings are normalized).
+
+## Open Projects + Labour Hours (Report Tools)
+
+List open projects (client-side filtering on `status=="open"` + `closeddate==""`):
+
+- Tool: `aroflo_list_open_projects`
+
+```json
+{
+  "sinceCreatedUtc": "2025-01-01",
+  "mode": "data"
+}
+```
+
+Report open projects with labour hours per task (grouped by project):
+
+- Tool: `aroflo_report_open_projects_with_task_hours`
+
+```json
+{
+  "sinceCreatedUtc": "2025-01-01",
+  "sinceDateRequested": "2025-01-01",
+  "hoursOnly": true,
+  "includeTaskStatus": true,
+  "mode": "data"
+}
+```
+
+Fetch tasks+hours for specific projects (when you already know the project IDs):
+
+- Tool: `aroflo_list_project_tasks_with_hours`
+
+```json
+{
+  "projectIds": ["PROJECT_ID_1", "PROJECT_ID_2"],
+  "sinceDateRequested": "2025-06-30",
+  "autoPaginate": true,
+  "maxResultsPerClient": 1000,
+  "hoursOnly": false,
+  "includeTaskStatus": true,
+  "mode": "data"
+}
+```
+
 ## Quotes
 
 List quotes where acceptance status is \"Awaiting Decision\":
@@ -19,7 +103,8 @@ List quotes where acceptance status is \"Awaiting Decision\":
 {
   "where": "and|acceptancestatus|=|Awaiting Decision",
   "page": 1,
-  "pageSize": 50
+  "pageSize": 50,
+  "mode": "data"
 }
 ```
 
@@ -32,7 +117,8 @@ List \"in progress\" quotes and include line items:
   "where": "and|status|=|in progress",
   "join": "lineitems",
   "page": 1,
-  "pageSize": 50
+  "pageSize": 50,
+  "mode": "data"
 }
 ```
 
@@ -47,7 +133,8 @@ List work orders awaiting acceptance decision and include tasks + bills:
   "where": "and|acceptancestatus|=|Awaiting Decision",
   "join": ["tasks", "bills"],
   "page": 1,
-  "pageSize": 50
+  "pageSize": 50,
+  "mode": "data"
 }
 ```
 
@@ -62,7 +149,8 @@ List approved bills including line items:
   "where": "and|status|=|Approved",
   "join": "lineitems",
   "page": 1,
-  "pageSize": 50
+  "pageSize": 50,
+  "mode": "data"
 }
 ```
 
@@ -88,7 +176,8 @@ List inventory assemblies and include their items:
   "where": "and|listtype|=|assembly",
   "join": "items",
   "page": 1,
-  "pageSize": 50
+  "pageSize": 50,
+  "mode": "data"
 }
 ```
 
@@ -104,7 +193,8 @@ List pending tasks and include totals + salesperson:
   "join": ["tasktotals", "salesperson"],
   "order": "daterequested|desc",
   "page": 1,
-  "pageSize": 50
+  "pageSize": 50,
+  "mode": "data"
 }
 ```
 
@@ -116,7 +206,8 @@ List tasks not yet processed by your integration:
 {
   "where": "and|linkprocessed|=|false",
   "page": 1,
-  "pageSize": 50
+  "pageSize": 50,
+  "mode": "data"
 }
 ```
 
@@ -130,7 +221,8 @@ List clients with `postable=true` (typical sync workflow):
 {
   "where": "and|postable|=|true",
   "page": 1,
-  "pageSize": 50
+  "pageSize": 50,
+  "mode": "data"
 }
 ```
 
@@ -157,6 +249,7 @@ Fetch incremental changes for a zone since a timestamp (see `aroflo://docs/api/l
   "sinceUtc": "2020-11-01T00:00:00Z",
   "orderDirection": "asc",
   "page": 1,
-  "pageSize": 500
+  "pageSize": 500,
+  "mode": "data"
 }
 ```
