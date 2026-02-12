@@ -11,6 +11,15 @@ describe('AroFlo param normalization', () => {
     expect(splitCombinedWhereClause('and|jobnumber|=|8038')).toEqual(['and|jobnumber|=|8038']);
   });
 
+  it('normalizes ISO date literals in WHERE clauses', () => {
+    expect(splitCombinedWhereClause('and|daterequested|>|2025-06-30')).toEqual([
+      'and|daterequested|>|2025/06/30'
+    ]);
+    expect(splitCombinedWhereClause('and|datetimerequested|>|2025-06-30 01:02:03')).toEqual([
+      'and|datetimerequested|>|2025/06/30 01:02:03'
+    ]);
+  });
+
   it('splits concatenated WHERE clauses into repeated params', () => {
     expect(
       normalizeWhereParam('and|clientid|=|ABC123|and|daterequested|>|2025/01/01')
@@ -33,4 +42,3 @@ describe('AroFlo param normalization', () => {
     ]);
   });
 });
-

@@ -19,6 +19,14 @@ function toArray(input?: StringOrStringArray): string[] {
   return input ?? [];
 }
 
+function normalizeDateLiterals(value: string): string {
+  // AroFlo docs say YYYY-MM-DD, but many tenants accept/emit YYYY/MM/DD.
+  // Normalize ISO-like date literals to slash format to reduce query failures.
+  // Example: "2025-06-30" -> "2025/06/30"
+  // Example: "2025-06-30 12:00:00" -> "2025/06/30 12:00:00"
+  return value.replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, '$1/$2/$3');
+}
+
 function splitCommaList(value: string): string[] {
   return value
     .split(',')
@@ -44,21 +52,23 @@ export function splitCombinedWhereClause(whereClause: string): string[] {
 
   const tokens = trimmed.split('|');
   if (tokens.length <= 4) {
-    return [trimmed];
+    return [normalizeDateLiterals(trimmed)];
   }
 
   // AroFlo WHERE clauses are generally: (and|or)|field|op|value
   if (tokens.length % 4 !== 0) {
-    return [trimmed];
+    return [normalizeDateLiterals(trimmed)];
   }
 
   const out: string[] = [];
   for (let i = 0; i < tokens.length; i += 4) {
     const conj = tokens[i]?.trim();
     if (conj !== 'and' && conj !== 'or') {
-      return [trimmed];
+      return [normalizeDateLiterals(trimmed)];
     }
-    out.push([tokens[i], tokens[i + 1], tokens[i + 2], tokens[i + 3]].join('|'));
+    out.push(
+      normalizeDateLiterals([tokens[i], tokens[i + 1], tokens[i + 2], tokens[i + 3]].join('|'))
+    );
   }
 
   return out;
@@ -100,4 +110,3 @@ export function normalizeJoinParam(join?: StringOrStringArray): string[] | undef
 
   return out.length > 0 ? out : undefined;
 }
-

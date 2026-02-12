@@ -7,6 +7,7 @@ import {
   normalizeOrderParam,
   normalizeWhereParam
 } from '../../aroflo/normalize-params.js';
+import { compactZoneResponseData } from '../../aroflo/select.js';
 import { AROFLO_ZONES, zoneToToolSuffix } from '../../aroflo/zones.js';
 import { arofloToolOutputSchema, errorToolResult, successToolResult } from './shared.js';
 
@@ -20,6 +21,9 @@ const inputSchema = {
   join: stringOrStringArraySchema.optional(),
   page: z.number().int().positive().optional(),
   pageSize: z.number().int().positive().max(500).optional(),
+  compact: z.boolean().optional(),
+  select: z.array(z.string().min(1)).optional(),
+  maxItems: z.number().int().positive().max(500).optional(),
   extra: z.record(z.string(), queryValueSchema).optional()
 };
 
@@ -38,6 +42,8 @@ export function registerZoneGetTools(server: McpServer, client: AroFloClient): v
         description:
           `Query the AroFlo ${zone} zone (GET). ` +
           `Use pipe-delimited WHERE clauses like "and|field|=|value", ORDER clauses like "field|asc", and JOIN areas like "lineitems". ` +
+          `where/order/join accept either a single string or an array. ` +
+          `Set compact=true and optionally select=[\"field\",\"nested.field\"] to reduce payload size. ` +
           `See resource "aroflo://docs/api/<slug>" (example: "aroflo://docs/api/quotes") for valid fields/values.`,
         inputSchema,
         outputSchema: arofloToolOutputSchema,
@@ -61,6 +67,35 @@ export function registerZoneGetTools(server: McpServer, client: AroFloClient): v
             pageSize: args.pageSize,
             extra: args.extra
           });
+
+          if (args.compact || (args.select && args.select.length > 0) || args.maxItems) {
+            const defaultSelect =
+              zone === 'Tasks' && args.compact && (!args.select || args.select.length === 0)
+                ? [
+                    'taskid',
+                    'jobnumber',
+                    'status',
+                    'taskname',
+                    'daterequested',
+                    'createdutc',
+                    'clientid',
+                    'org.orgid',
+                    'org.orgname',
+                    'projectid',
+                    'stageid',
+                    'project.projectid',
+                    'project.projectname',
+                    'tasktotals.totalhrs'
+                  ]
+                : undefined;
+
+            const compactedData = compactZoneResponseData(response.data, {
+              select: args.select ?? defaultSelect,
+              maxItems: args.maxItems
+            });
+            return successToolResult({ ...response, data: compactedData });
+          }
+
           return successToolResult(response);
         } catch (error) {
           return errorToolResult(error);
