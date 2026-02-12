@@ -1,0 +1,45 @@
+[
+  {
+    "name": "get_with_hostip",
+    "input": {
+      "method": "GET",
+      "secretKey": "top-secret",
+      "accept": "text/json",
+      "authorization": "uencoded=test-user&pencoded=test-pass&orgEncoded=test-org",
+      "afDateTimeUtc": "2024-05-13T23:14:15.000Z",
+      "varString": "zone=lastupdate&where=and%7Czonename%7C%3D%7Ctasks&order=lastupdateutc%7Casc&page=1",
+      "hostIp": "203.0.113.10",
+      "urlPath": ""
+    },
+    "expectedPayload": "GET+203.0.113.10++text/json+uencoded=test-user&pencoded=test-pass&orgEncoded=test-org+2024-05-13T23:14:15.000Z+zone=lastupdate&where=and%7Czonename%7C%3D%7Ctasks&order=lastupdateutc%7Casc&page=1",
+    "expectedSignature": "92b116903c261939c95edf99be9dcc9d0875cadbcfe4ea39eb1610a23150eb66c978552e0a3b7f35e532120cec474decf08056d906bafea9d0347eee1fdb7ec4"
+  },
+  {
+    "name": "get_without_hostip_multiple_where",
+    "input": {
+      "method": "GET",
+      "secretKey": "top-secret",
+      "accept": "text/json",
+      "authorization": "uencoded=test-user&pencoded=test-pass&orgEncoded=test-org",
+      "afDateTimeUtc": "2024-05-13T23:14:15.000Z",
+      "varString": "zone=lastupdate&where=and%7Czonename%7C%3D%7Cquotes&where=and%7Clastupdateutc%7C%3E%7C2022%2F02%2F01&order=lastupdateutc%7Casc&page=2&pageSize=250",
+      "urlPath": ""
+    },
+    "expectedPayload": "GET++text/json+uencoded=test-user&pencoded=test-pass&orgEncoded=test-org+2024-05-13T23:14:15.000Z+zone=lastupdate&where=and%7Czonename%7C%3D%7Cquotes&where=and%7Clastupdateutc%7C%3E%7C2022%2F02%2F01&order=lastupdateutc%7Casc&page=2&pageSize=250",
+    "expectedSignature": "44b846cb9789c4bdc867f360b81e9713dde09770e92f0dd14f8ade11048c3894a8a5d92afda10818d2d63dfca4ba79817d91c0837f61fcb7217676bf2619db98"
+  },
+  {
+    "name": "post_without_hostip",
+    "input": {
+      "method": "POST",
+      "secretKey": "top-secret",
+      "accept": "text/json",
+      "authorization": "uencoded=test-user&pencoded=test-pass&orgEncoded=test-org",
+      "afDateTimeUtc": "2024-05-13T23:14:15.000Z",
+      "varString": "zone=tasks&postxml=%3Cimsapi%3E%3Ctasks%3E%3Ctask%3E%3Ctaskname%3EInstall%20AC%3C%2Ftaskname%3E%3C%2Ftask%3E%3C%2Ftasks%3E%3C%2Fimsapi%3E",
+      "urlPath": ""
+    },
+    "expectedPayload": "POST++text/json+uencoded=test-user&pencoded=test-pass&orgEncoded=test-org+2024-05-13T23:14:15.000Z+zone=tasks&postxml=%3Cimsapi%3E%3Ctasks%3E%3Ctask%3E%3Ctaskname%3EInstall%20AC%3C%2Ftaskname%3E%3C%2Ftask%3E%3C%2Ftasks%3E%3C%2Fimsapi%3E",
+    "expectedSignature": "cc1268307616344cb0986335ec1f5f73a7c562359532020a1f0a07cff8827cdaac40d246ca794aa933211c10453323557ad93c04572cf5659cb195ec597ec0b7"
+  }
+]

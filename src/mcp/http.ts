@@ -1,0 +1,159 @@
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+
+import type { AroFloClient } from '../aroflo/client.js';
+import { logger } from '../utils/logger.js';
+import { createAroFloMcpServer } from './app.js';
+
+export interface HttpServerOptions {
+  host: string;
+  port: number;
+  path: string;
+  client: AroFloClient;
+}
+
+const ALLOWED_METHODS = new Set(['POST', 'GET', 'DELETE']);
+
+function setCorsHeaders(res: ServerResponse): void {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, GET, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'content-type, mcp-session-id');
+}
+
+function writeJson(res: ServerResponse, statusCode: number, payload: unknown): void {
+  if (res.headersSent) {
+    return;
+  }
+
+  setCorsHeaders(res);
+  res.writeHead(statusCode, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(payload));
+}
+
+function getPathname(req: IncomingMessage): string {
+  const host = req.headers.host ?? 'localhost';
+  const url = req.url ?? '/';
+
+  try {
+    const parsed = new URL(url, `http://${host}`);
+    return parsed.pathname;
+  } catch {
+    return '/';
+  }
+}
+
+export async function handleMcpHttpRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  client: AroFloClient,
+  mcpPath: string
+): Promise<void> {
+  setCorsHeaders(res);
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
+  if (getPathname(req) !== mcpPath) {
+    writeJson(res, 404, {
+      jsonrpc: '2.0',
+      error: {
+        code: -32004,
+        message: 'Not found'
+      },
+      id: null
+    });
+    return;
+  }
+
+  const method = req.method ?? '';
+  if (!ALLOWED_METHODS.has(method)) {
+    writeJson(res, 405, {
+      jsonrpc: '2.0',
+      error: {
+        code: -32000,
+        message: 'Method not allowed'
+      },
+      id: null
+    });
+    return;
+  }
+
+  const mcpServer = createAroFloMcpServer(client);
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined
+  });
+
+  let closed = false;
+  const closeResources = async () => {
+    if (closed) {
+      return;
+    }
+
+    closed = true;
+    await Promise.allSettled([transport.close(), mcpServer.close()]);
+  };
+
+  res.on('close', () => {
+    void closeResources();
+  });
+
+  try {
+    await mcpServer.connect(transport);
+    await transport.handleRequest(req, res);
+  } catch (error) {
+    logger.error({ err: error, method, path: mcpPath }, 'Failed to handle MCP HTTP request');
+
+    await closeResources();
+
+    writeJson(res, 500, {
+      jsonrpc: '2.0',
+      error: {
+        code: -32603,
+        message: 'Internal server error'
+      },
+      id: null
+    });
+  }
+}
+
+export async function startHttpServer(options: HttpServerOptions): Promise<Server> {
+  const server = createServer((req, res) => {
+    void handleMcpHttpRequest(req, res, options.client, options.path);
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(options.port, options.host, () => {
+      server.off('error', reject);
+      resolve();
+    });
+  });
+
+  logger.info(
+    {
+      host: options.host,
+      port: options.port,
+      path: options.path
+    },
+    'AroFlo MCP HTTP server started'
+  );
+
+  return server;
+}
+
+export async function stopHttpServer(server: Server): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
+}

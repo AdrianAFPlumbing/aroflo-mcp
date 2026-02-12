@@ -1,0 +1,45 @@
+{
+  "name": "aroflo-mcp",
+  "version": "0.1.0",
+  "description": "Standalone production-ready MCP server for the AroFlo API",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "aroflo-mcp": "bin/aroflo-mcp.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "tsx src/mcp/server.ts",
+    "dev:http": "MCP_TRANSPORT=http tsx src/mcp/server.ts",
+    "start": "node dist/mcp/server.js",
+    "start:http": "MCP_TRANSPORT=http node dist/mcp/server.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "npm run typecheck && npm run format:check",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "keywords": [
+    "mcp",
+    "aroflo"
+  ],
+  "license": "ISC",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "dotenv": "^17.2.4",
+    "p-retry": "^7.1.1",
+    "p-throttle": "^8.1.0",
+    "pino": "^10.3.1",
+    "undici": "^7.21.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.3",
+    "eslint": "^10.0.0",
+    "prettier": "^3.8.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}

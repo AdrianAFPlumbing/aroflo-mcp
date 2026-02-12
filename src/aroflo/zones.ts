@@ -1,0 +1,51 @@
+export const AROFLO_ZONES = [
+  'LastUpdate',
+  'BusinessUnits',
+  'PermissionGroups',
+  'Users',
+  'UserPosition',
+  'Timesheets',
+  'TransactionTerms',
+  'Priorities',
+  'Clients',
+  'ClientNotes',
+  'Contacts',
+  'Locations',
+  'Quotes',
+  'QuoteLineItems',
+  'TaskTypes',
+  'Tasks',
+  'TaskMaterials',
+  'TaskLabours',
+  'TaskExpenses',
+  'TaskResources',
+  'Invoices',
+  'Payments',
+  'Suppliers',
+  'Inventory',
+  'InventoryCategories',
+  'InventoryStockLevels',
+  'CustomHolders',
+  'InventoryLists',
+  'PurchaseOrders',
+  'Bills',
+  'BillLineItems',
+  'WorkOrders',
+  'WorkOrderLineItems',
+  'Assets',
+  'AssetCategories',
+  'MessageBoard',
+  'Substatus',
+  'DocumentsAndPhotos',
+  'Schedules',
+  'Projects',
+  'Stages',
+  'MessageTemplates',
+  'TrackingCentres'
+] as const;
+
+export type AroFloZone = (typeof AROFLO_ZONES)[number];
+
+export function zoneToToolSuffix(zone: string): string {
+  return zone.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
