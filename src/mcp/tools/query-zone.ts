@@ -2,6 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
 import type { AroFloClient } from '../../aroflo/client.js';
+import { extractZoneItems } from '../../aroflo/items.js';
 import {
   normalizeJoinParam,
   normalizeOrderParam,
@@ -9,15 +10,12 @@ import {
 } from '../../aroflo/normalize-params.js';
 import { validateWhereOrThrow } from '../../aroflo/where-validation.js';
 import {
-  countZoneArrays,
-  getZoneResponse,
   mergeZoneResponseData,
-  truncateZoneArrays,
-  withDebug,
-  withZoneResponseMeta
+  truncateZoneArrays
 } from '../../aroflo/paginate.js';
 import { compactZoneResponseData } from '../../aroflo/select.js';
-import { arofloToolOutputSchema, errorToolResult, successToolResult } from './shared.js';
+import { buildZoneDataEnvelope, resolveOutputMode } from '../output.js';
+import { errorToolResult, successToolResult } from './shared.js';
 
 const stringOrStringArraySchema = z.union([z.string().min(1), z.array(z.string().min(1))]);
 
@@ -33,7 +31,10 @@ const inputSchema = {
   maxResults: z.number().int().positive().max(5000).optional(),
   maxItemsTotal: z.number().int().positive().max(5000).optional(),
   validateWhere: z.boolean().optional(),
+  mode: z.enum(['data', 'verbose', 'debug', 'raw']).optional(),
+  verbose: z.boolean().optional(),
   debug: z.boolean().optional(),
+  raw: z.boolean().optional(),
   compact: z.boolean().optional(),
   select: z.array(z.string().min(1)).optional(),
   maxItems: z.number().int().positive().max(500).optional(),
@@ -50,9 +51,10 @@ export function registerQueryZoneTool(server: McpServer, client: AroFloClient): 
         'Use pipe-delimited WHERE clauses like "and|field|=|value", ORDER clauses like "field|asc", and JOIN areas like "lineitems". ' +
         'where/order/join accept either a single string or an array. ' +
         'Set compact=true and optionally select=["field","nested.field"] to reduce payload size. ' +
+        'mode: data|verbose|debug|raw (default: data). ' +
         'See resource "aroflo://docs/api" for the extracted zone docs.',
       inputSchema,
-      outputSchema: arofloToolOutputSchema,
+      outputSchema: z.any(),
       annotations: {
         readOnlyHint: true,
         idempotentHint: true,
@@ -60,6 +62,7 @@ export function registerQueryZoneTool(server: McpServer, client: AroFloClient): 
       }
     },
     async (args) => {
+      const mode = resolveOutputMode(args);
       try {
         const where = normalizeWhereParam(args.where);
         const order = normalizeOrderParam(args.order);
@@ -110,13 +113,9 @@ export function registerQueryZoneTool(server: McpServer, client: AroFloClient): 
 
         if (autoPaginate) {
           let currentPage = startPage;
-          let lastPageCount = (() => {
-            const zr = getZoneResponse(response.data);
-            return zr ? countZoneArrays(zr) : 0;
-          })();
+          let lastPageCount = extractZoneItems(args.zone, response.data).items.length;
           while (true) {
-            const zr = getZoneResponse(response.data);
-            const total = zr ? countZoneArrays(zr) : 0;
+            const total = extractZoneItems(args.zone, response.data).items.length;
 
             if (typeof maxResults === 'number' && total >= maxResults) {
               truncated = true;
@@ -146,8 +145,7 @@ export function registerQueryZoneTool(server: McpServer, client: AroFloClient): 
               extra: args.extra
             });
 
-            const nextZr = getZoneResponse(next.data);
-            const nextCount = nextZr ? countZoneArrays(nextZr) : 0;
+            const nextCount = extractZoneItems(args.zone, next.data).items.length;
             if (nextCount === 0) {
               break;
             }
@@ -163,8 +161,7 @@ export function registerQueryZoneTool(server: McpServer, client: AroFloClient): 
         }
 
         if (typeof maxResults === 'number') {
-          const zr = getZoneResponse(response.data);
-          const total = zr ? countZoneArrays(zr) : 0;
+          const total = extractZoneItems(args.zone, response.data).items.length;
           if (total > maxResults) {
             const { truncated: newData } = truncateZoneArrays(response.data, maxResults);
             response = { ...response, data: newData };
@@ -173,44 +170,44 @@ export function registerQueryZoneTool(server: McpServer, client: AroFloClient): 
           }
         }
 
-        if (args.compact || (args.select && args.select.length > 0) || args.maxItems) {
-          let compactedData: unknown = compactZoneResponseData(response.data, {
-            select: args.select,
+        let compactApplied = false;
+        let effectiveResponse = response;
+        const select = args.select;
+
+        if (args.compact || (select && select.length > 0) || args.maxItems) {
+          compactApplied = true;
+          const compactedData = compactZoneResponseData(response.data, {
+            select,
             maxItems: args.maxItems
           });
-          if (autoPaginate || truncated) {
-            compactedData = withZoneResponseMeta(compactedData, {
-              pagesFetched,
-              truncated,
-              truncatedReason,
-              nextPage
-            });
-          }
-          if (debugInfo) {
-            compactedData = withDebug(compactedData, debugInfo);
-          }
-          return successToolResult({ ...response, data: compactedData });
+          effectiveResponse = { ...response, data: compactedData };
         }
 
-        if (autoPaginate || debugInfo || truncated) {
-          let finalData: unknown = response.data;
-          if (autoPaginate || truncated) {
-            finalData = withZoneResponseMeta(finalData, {
-              pagesFetched,
-              truncated,
-              truncatedReason,
-              nextPage
-            });
-          }
-          if (debugInfo) {
-            finalData = withDebug(finalData, debugInfo);
-          }
-          return successToolResult({ ...response, data: finalData });
-        }
+        const out = buildZoneDataEnvelope({
+          zone: args.zone,
+          response: effectiveResponse,
+          page: startPage,
+          pageSize,
+          mode,
+          mcp:
+            autoPaginate || truncated
+              ? {
+                  autoPaginate,
+                  pagesFetched,
+                  truncated,
+                  truncatedReason,
+                  nextPage
+                }
+              : undefined,
+          debug: debugInfo,
+          compactApplied,
+          select,
+          maxItems: args.maxItems
+        });
 
-        return successToolResult(response);
+        return successToolResult(out);
       } catch (error) {
-        return errorToolResult(error);
+        return errorToolResult(error, { mode, debug: { zone: args.zone } });
       }
     }
   );

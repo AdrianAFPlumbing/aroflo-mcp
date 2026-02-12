@@ -2,14 +2,19 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
 import type { AroFloClient } from '../../aroflo/client.js';
-import { arofloToolOutputSchema, errorToolResult, successToolResult } from './shared.js';
+import { buildZoneDataEnvelope, resolveOutputMode } from '../output.js';
+import { errorToolResult, successToolResult } from './shared.js';
 
 const inputSchema = {
   zoneName: z.string().min(1).optional(),
   sinceUtc: z.string().min(1).optional(),
   orderDirection: z.enum(['asc', 'desc']).default('asc'),
   page: z.number().int().positive().default(1),
-  pageSize: z.number().int().positive().max(500).optional()
+  pageSize: z.number().int().positive().max(500).optional(),
+  mode: z.enum(['data', 'verbose', 'debug', 'raw']).optional(),
+  verbose: z.boolean().optional(),
+  debug: z.boolean().optional(),
+  raw: z.boolean().optional()
 };
 
 export function registerGetLastUpdateTool(server: McpServer, client: AroFloClient): void {
@@ -19,7 +24,7 @@ export function registerGetLastUpdateTool(server: McpServer, client: AroFloClien
       title: 'AroFlo: Get LastUpdate',
       description: 'Query the AroFlo lastupdate zone for incremental sync workflows.',
       inputSchema,
-      outputSchema: arofloToolOutputSchema,
+      outputSchema: z.any(),
       annotations: {
         readOnlyHint: true,
         idempotentHint: true,
@@ -27,6 +32,7 @@ export function registerGetLastUpdateTool(server: McpServer, client: AroFloClien
       }
     },
     async (args) => {
+      const mode = resolveOutputMode(args);
       try {
         const where: string[] = [];
         if (args.zoneName) {
@@ -43,9 +49,29 @@ export function registerGetLastUpdateTool(server: McpServer, client: AroFloClien
           pageSize: args.pageSize
         });
 
-        return successToolResult(response);
+        const out = buildZoneDataEnvelope({
+          zone: 'LastUpdate',
+          response,
+          page: args.page,
+          pageSize: args.pageSize,
+          mode,
+          debug:
+            mode === 'debug' || mode === 'raw'
+              ? {
+                  zone: 'LastUpdate',
+                  normalized: {
+                    where,
+                    order: [`lastupdateutc|${args.orderDirection}`],
+                    page: args.page,
+                    pageSize: args.pageSize
+                  }
+                }
+              : undefined
+        });
+
+        return successToolResult(out);
       } catch (error) {
-        return errorToolResult(error);
+        return errorToolResult(error, { mode, debug: { zone: 'LastUpdate' } });
       }
     }
   );

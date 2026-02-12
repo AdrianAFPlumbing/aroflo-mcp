@@ -3,13 +3,13 @@ import { z } from 'zod';
 
 import type { AroFloClient } from '../../aroflo/client.js';
 import { normalizeWhereParam } from '../../aroflo/normalize-params.js';
+import { resolveOutputMode } from '../output.js';
 import {
-  countZoneArrays,
   getZoneResponse,
   mergeZoneResponseData,
   truncateZoneArrays
 } from '../../aroflo/paginate.js';
-import { errorToolResult } from './shared.js';
+import { errorToolResult, successToolResult } from './shared.js';
 
 function toNumber(value: unknown): number {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -20,6 +20,17 @@ function toNumber(value: unknown): number {
     return Number.isFinite(n) ? n : 0;
   }
   return 0;
+}
+
+function toInt(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+  if (typeof value === 'string') {
+    const n = Number(value);
+    return Number.isFinite(n) ? Math.trunc(n) : undefined;
+  }
+  return undefined;
 }
 
 function getTasksArray(data: unknown): unknown[] {
@@ -72,6 +83,8 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
         autoPaginate: z.boolean().default(true),
         pageSize: z.number().int().positive().max(500).default(200),
         maxResults: z.number().int().positive().max(5000).default(2000),
+        mode: z.enum(['data', 'verbose', 'debug', 'raw']).optional(),
+        verbose: z.boolean().optional(),
         debug: z.boolean().optional()
       },
       // Keep the existing generic output schema; data is free-form.
@@ -83,6 +96,7 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
       }
     },
     async (args) => {
+      const mode = resolveOutputMode(args);
       try {
         const whereClauses: string[] = [];
         if (args.orgId) {
@@ -105,8 +119,7 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
         if (args.autoPaginate) {
           let currentPage = startPage;
           while (true) {
-            const zr = getZoneResponse(response.data);
-            const total = zr ? countZoneArrays(zr) : 0;
+            const total = getProjectsArray(response.data).length;
             if (total >= maxResults) {
               truncated = true;
               nextPage = currentPage + 1;
@@ -135,8 +148,7 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
         }
 
         // Cap results hard.
-        const zr = getZoneResponse(response.data);
-        const total = zr ? countZoneArrays(zr) : 0;
+        const total = getProjectsArray(response.data).length;
         if (total > maxResults) {
           response = { ...response, data: truncateZoneArrays(response.data, maxResults).truncated };
           truncated = true;
@@ -145,31 +157,58 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
         const projects = getProjectsArray(response.data);
         const openProjects = pickOpenProjects(projects, args.managerUserId);
 
-        const payload: Record<string, unknown> = {
-          openProjects,
-          meta: {
-            pagesFetched,
-            totalProjects: projects.length,
-            openProjects: openProjects.length,
-            truncated,
-            nextPage
-          }
+        const mapped = openProjects
+          .filter(isRecord)
+          .map((p) => {
+            const clientOrg = isRecord(p.client) ? p.client : undefined;
+            const managerUser = isRecord(p.manageruser) ? p.manageruser : undefined;
+            return {
+              projectid: p.projectid,
+              projectnumber: p.projectnumber,
+              projectname: p.projectname,
+              refno: p.refno,
+              status: p.status,
+              startdate: p.startdate,
+              enddate: p.enddate,
+              closeddate: p.closeddate,
+              client: clientOrg
+                ? { orgid: clientOrg.orgid, orgname: clientOrg.orgname }
+                : undefined,
+              manageruser: managerUser
+                ? { userid: managerUser.userid, username: managerUser.username }
+                : undefined
+            };
+          })
+          .sort((a, b) => (toInt(a.projectnumber) ?? 0) - (toInt(b.projectnumber) ?? 0));
+
+        const out: Record<string, unknown> = {
+          projects: mapped,
+          summary: { projectCount: mapped.length }
         };
 
-        if (args.debug) {
-          payload.debug = {
-            where,
-            pageSize,
-            maxResults
-          };
+        if (truncated) {
+          out.mcp = { pagesFetched, truncated, nextPage };
         }
 
-        return {
-          structuredContent: payload,
-          content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }]
-        };
+        if (mode === 'verbose' || mode === 'debug' || mode === 'raw') {
+          out.meta = { pagesFetched, totalProjects: projects.length, truncated, nextPage };
+        }
+
+        if (mode === 'debug' || mode === 'raw') {
+          out.debug = args.debug
+            ? {
+                normalizedParams: { where, pageSize, maxResults }
+              }
+            : undefined;
+        }
+
+        if (mode === 'raw') {
+          out.raw = { openProjects };
+        }
+
+        return successToolResult(out);
       } catch (error) {
-        return errorToolResult(error);
+        return errorToolResult(error, { mode, debug: { tool: 'aroflo_list_open_projects' } });
       }
     }
   );
@@ -186,9 +225,14 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
         // Use one or both to narrow.
         sinceDateRequested: z.string().min(1).optional(),
         sinceCreatedUtc: z.string().min(1).optional(),
+        hoursOnly: z.boolean().default(false),
+        includeTaskStatus: z.boolean().default(true),
+        includeUnassigned: z.boolean().default(false),
         autoPaginate: z.boolean().default(true),
         pageSize: z.number().int().positive().max(500).default(200),
         maxResultsPerClient: z.number().int().positive().max(5000).default(2000),
+        mode: z.enum(['data', 'verbose', 'debug', 'raw']).optional(),
+        verbose: z.boolean().optional(),
         debug: z.boolean().optional()
       },
       outputSchema: z.any(),
@@ -199,6 +243,7 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
       }
     },
     async (args) => {
+      const mode = resolveOutputMode(args);
       try {
         const projectIdSet = new Set(args.projectIds);
 
@@ -306,7 +351,9 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
           tasksByProject[pid] = [];
         }
 
-        for (const tasks of Object.values(perClientResults)) {
+        const unassignedTasksByClient: Record<string, unknown[]> = {};
+
+        for (const [clientId, tasks] of Object.entries(perClientResults)) {
           for (const t of tasks) {
             if (!isRecord(t)) {
               continue;
@@ -319,6 +366,24 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
             const projectId = joinedProjectId ?? rawProjectId;
 
             if (!projectId || !projectIdSet.has(projectId)) {
+              if (args.includeUnassigned) {
+                const totals = t.tasktotals;
+                const hours = isRecord(totals) ? toNumber(totals.totalhrs) : 0;
+                if (args.hoursOnly && hours <= 0) {
+                  continue;
+                }
+                const mapped: Record<string, unknown> = {
+                  taskid: t.taskid,
+                  refcode: t.refcode,
+                  taskname: t.taskname,
+                  daterequested: t.daterequested,
+                  hours
+                };
+                if (args.includeTaskStatus) {
+                  mapped.status = t.status;
+                }
+                (unassignedTasksByClient[clientId] ??= []).push(mapped);
+              }
               continue;
             }
 
@@ -328,59 +393,99 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
 
         const projects = Object.entries(tasksByProject).map(([projectId, tasks]) => {
           const p = projectsById[projectId];
-          const projectName = isRecord(p) && typeof p.projectname === 'string' ? p.projectname : undefined;
-          const clientInfo = isRecord(p) ? p.client : undefined;
+          const projectName =
+            isRecord(p) && typeof p.projectname === 'string' ? p.projectname : undefined;
+          const projectNumber =
+            isRecord(p) && typeof p.projectnumber !== 'undefined' ? p.projectnumber : undefined;
+          const refno = isRecord(p) && typeof p.refno !== 'undefined' ? p.refno : undefined;
+
+          const clientInfoRaw = isRecord(p) ? p.client : undefined;
+          const clientInfo = isRecord(clientInfoRaw)
+            ? { orgid: clientInfoRaw.orgid, orgname: clientInfoRaw.orgname }
+            : undefined;
 
           const mappedTasks = tasks
             .filter(isRecord)
             .map((t) => {
               const totals = t.tasktotals;
-              const totalhrs = isRecord(totals) ? toNumber(totals.totalhrs) : 0;
-              return {
+              const hours = isRecord(totals) ? toNumber(totals.totalhrs) : 0;
+              const mapped: Record<string, unknown> = {
                 taskid: t.taskid,
-                jobnumber: t.jobnumber,
                 refcode: t.refcode,
                 taskname: t.taskname,
-                status: t.status,
                 daterequested: t.daterequested,
-                createdutc: t.createdutc,
-                totalhrs
+                hours
               };
+              if (args.includeTaskStatus) {
+                mapped.status = t.status;
+              }
+              return mapped;
             });
 
-          const totalHours = mappedTasks.reduce((sum, t) => sum + toNumber(t.totalhrs), 0);
+          const filteredTasks = mappedTasks
+            .filter((t) => !args.hoursOnly || toNumber((t as any).hours) > 0)
+            .sort((a, b) => {
+              const ad = String((a as any).daterequested ?? '');
+              const bd = String((b as any).daterequested ?? '');
+              if (ad !== bd) return ad.localeCompare(bd);
+              return String((a as any).refcode ?? '').localeCompare(String((b as any).refcode ?? ''));
+            });
+
+          const totalHours = filteredTasks.reduce((sum, t) => sum + toNumber((t as any).hours), 0);
 
           return {
             projectid: projectId,
+            projectnumber: projectNumber,
             projectname: projectName,
+            refno,
             client: clientInfo,
             totalHours,
-            tasks: mappedTasks
+            tasks: filteredTasks
           };
-        });
+        }).sort((a, b) => (toInt((a as any).projectnumber) ?? 0) - (toInt((b as any).projectnumber) ?? 0));
 
-        const payload: Record<string, unknown> = {
+        const projectCount = projects.length;
+        const taskCount = projects.reduce((sum, p) => sum + ((p as any).tasks?.length ?? 0), 0);
+        const totalHours = projects.reduce((sum, p) => sum + toNumber((p as any).totalHours), 0);
+
+        const out: Record<string, unknown> = {
           projects,
-          meta: {
-            clientsQueried: Array.from(clientIds),
-            perClient: perClientMeta
-          }
+          summary: { projectCount, taskCount, totalHours }
         };
 
-        if (args.debug) {
-          payload.debug = {
-            projectIds: args.projectIds,
-            sinceDateRequested: args.sinceDateRequested,
-            sinceCreatedUtc: args.sinceCreatedUtc
+        if (args.includeUnassigned) {
+          out.unassignedTasksByClient = unassignedTasksByClient;
+        }
+
+        if (mode === 'verbose' || mode === 'debug' || mode === 'raw') {
+          out.meta = {
+            clientsQueried: Array.from(clientIds),
+            perClient: perClientMeta
           };
         }
 
-        return {
-          structuredContent: payload,
-          content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }]
-        };
+        if (mode === 'debug' || mode === 'raw') {
+          out.debug = args.debug
+            ? {
+                params: {
+                  projectIds: args.projectIds,
+                  sinceDateRequested: args.sinceDateRequested,
+                  sinceCreatedUtc: args.sinceCreatedUtc
+                }
+              }
+            : undefined;
+        }
+
+        if (mode === 'raw') {
+          out.raw = { projectsById };
+        }
+
+        return successToolResult(out);
       } catch (error) {
-        return errorToolResult(error);
+        return errorToolResult(error, {
+          mode,
+          debug: { tool: 'aroflo_list_project_tasks_with_hours' }
+        });
       }
     }
   );
@@ -399,9 +504,13 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
         sinceDateRequested: z.string().min(1).optional(),
         sinceTaskCreatedUtc: z.string().min(1).optional(),
         includeTasksWithoutProject: z.boolean().default(false),
+        hoursOnly: z.boolean().default(false),
+        includeTaskStatus: z.boolean().default(true),
         pageSize: z.number().int().positive().max(500).default(200),
         maxProjects: z.number().int().positive().max(5000).default(2000),
         maxTasksPerClient: z.number().int().positive().max(5000).default(2000),
+        mode: z.enum(['data', 'verbose', 'debug', 'raw']).optional(),
+        verbose: z.boolean().optional(),
         debug: z.boolean().optional()
       },
       outputSchema: z.any(),
@@ -412,6 +521,7 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
       }
     },
     async (args) => {
+      const mode = resolveOutputMode(args);
       try {
         const whereClauses: string[] = [];
         if (args.orgId) {
@@ -544,18 +654,27 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
             const projectId = joinedProjectId ?? rawProjectId;
 
             const totals = t.tasktotals;
-            const totalhrs = isRecord(totals) ? toNumber(totals.totalhrs) : 0;
+            const hours = isRecord(totals) ? toNumber(totals.totalhrs) : 0;
+            if (args.hoursOnly && hours <= 0) {
+              continue;
+            }
 
-            const mapped = {
+            const dateRequested =
+              (t.daterequested as any) ??
+              (t.requestdate as any) ??
+              (t.requestdatetime as any) ??
+              undefined;
+
+            const mapped: Record<string, unknown> = {
               taskid: t.taskid,
-              jobnumber: t.jobnumber,
               refcode: t.refcode,
               taskname: t.taskname,
-              status: t.status,
-              daterequested: t.daterequested,
-              createdutc: t.createdutc,
-              totalhrs
+              daterequested: dateRequested,
+              hours
             };
+            if (args.includeTaskStatus) {
+              mapped.status = t.status;
+            }
 
             if (projectId && openProjectIds.has(projectId)) {
               tasksByProject[projectId]!.push(mapped);
@@ -582,50 +701,71 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
           .filter(isRecord)
           .map((p) => {
             const pid = p.projectid as string;
-            const tasks = tasksByProject[pid] ?? [];
-            const totalHours = tasks.reduce((sum, t) => sum + toNumber(t.totalhrs), 0);
+            const tasks = (tasksByProject[pid] ?? [])
+              .filter(isRecord)
+              .sort((a, b) => {
+                const ad = String((a as any).daterequested ?? '');
+                const bd = String((b as any).daterequested ?? '');
+                if (ad !== bd) return ad.localeCompare(bd);
+                return String((a as any).refcode ?? '').localeCompare(String((b as any).refcode ?? ''));
+              });
+
+            const totalHours = tasks.reduce((sum, t) => sum + toNumber((t as any).hours), 0);
             const projectname = typeof p.projectname === 'string' ? p.projectname : undefined;
+            const projectnumber = p.projectnumber;
+            const clientOrg = isRecord(p.client) ? p.client : undefined;
+
             return {
               projectid: pid,
+              projectnumber,
               projectname,
               refno: p.refno,
-              status: p.status,
-              startdate: p.startdate,
-              enddate: p.enddate,
-              closeddate: p.closeddate,
-              client: p.client,
-              manageruser: p.manageruser,
+              client: clientOrg
+                ? { orgid: clientOrg.orgid, orgname: clientOrg.orgname }
+                : undefined,
               totalHours,
               tasks
             };
           })
-          .sort((a, b) => String(a.projectname ?? '').localeCompare(String(b.projectname ?? '')));
+          .sort((a, b) => (toInt(a.projectnumber) ?? 0) - (toInt(b.projectnumber) ?? 0));
 
-        const payload: Record<string, unknown> = {
+        const projectCount = projects.length;
+        const taskCount = projects.reduce((sum, p) => sum + (p.tasks as any[]).length, 0);
+        const totalHours = projects.reduce((sum, p) => sum + toNumber(p.totalHours), 0);
+
+        const out: Record<string, unknown> = {
           projects,
-          meta: {
+          summary: { projectCount, taskCount, totalHours }
+        };
+
+        if (args.includeTasksWithoutProject) {
+          out.unassignedTasksByClient = unassignedByClient;
+        }
+
+        if (mode === 'verbose' || mode === 'debug' || mode === 'raw') {
+          out.meta = {
             projectsFetched: allProjects.length,
             openProjects: openProjects.length,
             pagesFetchedProjects,
             clientsQueried: Array.from(clientIds),
             perClient: perClientMeta
-          }
-        };
-
-        if (args.includeTasksWithoutProject) {
-          payload.unassignedTasksByClient = unassignedByClient;
+          };
         }
 
-        if (args.debug) {
-          payload.debug = { whereProjects: where };
+        if (mode === 'debug' || mode === 'raw') {
+          out.debug = args.debug ? { whereProjects: where } : undefined;
         }
 
-        return {
-          structuredContent: payload,
-          content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }]
-        };
+        if (mode === 'raw') {
+          out.raw = { openProjects };
+        }
+
+        return successToolResult(out);
       } catch (error) {
-        return errorToolResult(error);
+        return errorToolResult(error, {
+          mode,
+          debug: { tool: 'aroflo_report_open_projects_with_task_hours' }
+        });
       }
     }
   );

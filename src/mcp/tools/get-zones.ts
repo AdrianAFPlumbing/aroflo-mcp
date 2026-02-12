@@ -2,6 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
 import type { AroFloClient } from '../../aroflo/client.js';
+import { extractZoneItems } from '../../aroflo/items.js';
 import {
   normalizeJoinParam,
   normalizeOrderParam,
@@ -9,16 +10,13 @@ import {
 } from '../../aroflo/normalize-params.js';
 import { validateWhereOrThrow } from '../../aroflo/where-validation.js';
 import {
-  countZoneArrays,
-  getZoneResponse,
   mergeZoneResponseData,
-  truncateZoneArrays,
-  withDebug,
-  withZoneResponseMeta
+  truncateZoneArrays
 } from '../../aroflo/paginate.js';
 import { compactZoneResponseData } from '../../aroflo/select.js';
+import { buildZoneDataEnvelope, resolveOutputMode } from '../output.js';
 import { AROFLO_ZONES, zoneToToolSuffix } from '../../aroflo/zones.js';
-import { arofloToolOutputSchema, errorToolResult, successToolResult } from './shared.js';
+import { errorToolResult, successToolResult } from './shared.js';
 
 const queryValueSchema = z.union([z.string(), z.number(), z.boolean()]);
 
@@ -35,7 +33,10 @@ const inputSchema = {
   maxResults: z.number().int().positive().max(5000).optional(),
   maxItemsTotal: z.number().int().positive().max(5000).optional(),
   validateWhere: z.boolean().optional(),
+  mode: z.enum(['data', 'verbose', 'debug', 'raw']).optional(),
+  verbose: z.boolean().optional(),
   debug: z.boolean().optional(),
+  raw: z.boolean().optional(),
   compact: z.boolean().optional(),
   select: z.array(z.string().min(1)).optional(),
   maxItems: z.number().int().positive().max(500).optional(),
@@ -58,10 +59,11 @@ export function registerZoneGetTools(server: McpServer, client: AroFloClient): v
           `Query the AroFlo ${zone} zone (GET). ` +
           `Use pipe-delimited WHERE clauses like "and|field|=|value", ORDER clauses like "field|asc", and JOIN areas like "lineitems". ` +
           `where/order/join accept either a single string or an array. ` +
+          `mode: data|verbose|debug|raw (default: data). ` +
           `Set compact=true and optionally select=[\"field\",\"nested.field\"] to reduce payload size. ` +
           `See resource "aroflo://docs/api/<slug>" (example: "aroflo://docs/api/quotes") for valid fields/values.`,
         inputSchema,
-        outputSchema: arofloToolOutputSchema,
+        outputSchema: z.any(),
         annotations: {
           readOnlyHint: true,
           idempotentHint: true,
@@ -69,6 +71,7 @@ export function registerZoneGetTools(server: McpServer, client: AroFloClient): v
         }
       },
       async (args) => {
+        const mode = resolveOutputMode(args);
         try {
           const where = normalizeWhereParam(args.where);
           const order = normalizeOrderParam(args.order);
@@ -119,13 +122,9 @@ export function registerZoneGetTools(server: McpServer, client: AroFloClient): v
 
           if (autoPaginate) {
             let currentPage = startPage;
-            let lastPageCount = (() => {
-              const zr = getZoneResponse(response.data);
-              return zr ? countZoneArrays(zr) : 0;
-            })();
+            let lastPageCount = extractZoneItems(zone, response.data).items.length;
             while (true) {
-              const zr = getZoneResponse(response.data);
-              const total = zr ? countZoneArrays(zr) : 0;
+              const total = extractZoneItems(zone, response.data).items.length;
 
               if (typeof maxResults === 'number' && total >= maxResults) {
                 truncated = true;
@@ -156,8 +155,7 @@ export function registerZoneGetTools(server: McpServer, client: AroFloClient): v
               });
 
               // If the next page contributes nothing, stop.
-              const nextZr = getZoneResponse(next.data);
-              const nextCount = nextZr ? countZoneArrays(nextZr) : 0;
+              const nextCount = extractZoneItems(zone, next.data).items.length;
               if (nextCount === 0) {
                 break;
               }
@@ -174,8 +172,7 @@ export function registerZoneGetTools(server: McpServer, client: AroFloClient): v
           }
 
           if (typeof maxResults === 'number') {
-            const zr = getZoneResponse(response.data);
-            const total = zr ? countZoneArrays(zr) : 0;
+            const total = extractZoneItems(zone, response.data).items.length;
             if (total > maxResults) {
               const { truncated: newData } = truncateZoneArrays(response.data, maxResults);
               response = { ...response, data: newData };
@@ -184,66 +181,63 @@ export function registerZoneGetTools(server: McpServer, client: AroFloClient): v
             }
           }
 
-          if (args.compact || (args.select && args.select.length > 0) || args.maxItems) {
-            const defaultSelect =
-              zone === 'Tasks' && args.compact && (!args.select || args.select.length === 0)
-                ? [
-                    'taskid',
-                    'jobnumber',
-                    'status',
-                    'taskname',
-                    'daterequested',
-                    'createdutc',
-                    'clientid',
-                    'org.orgid',
-                    'org.orgname',
-                    'projectid',
-                    'stageid',
-                    'project.projectid',
-                    'project.projectname',
-                    'tasktotals.totalhrs'
-                  ]
-                : undefined;
+          let compactApplied = false;
+          let effectiveResponse = response;
+          const defaultSelect =
+            zone === 'Tasks' && args.compact && (!args.select || args.select.length === 0)
+              ? [
+                  'taskid',
+                  'jobnumber',
+                  'status',
+                  'taskname',
+                  'daterequested',
+                  'createdutc',
+                  'clientid',
+                  'org.orgid',
+                  'org.orgname',
+                  'projectid',
+                  'stageid',
+                  'project.projectid',
+                  'project.projectname',
+                  'tasktotals.totalhrs'
+                ]
+              : undefined;
+          const select = args.select ?? defaultSelect;
 
+          if (args.compact || (select && select.length > 0) || args.maxItems) {
+            compactApplied = true;
             const compactedData = compactZoneResponseData(response.data, {
-              select: args.select ?? defaultSelect,
+              select,
               maxItems: args.maxItems
             });
-            let finalData: unknown = compactedData;
-            if (autoPaginate || truncated) {
-              finalData = withZoneResponseMeta(finalData, {
-                pagesFetched,
-                truncated,
-                truncatedReason,
-                nextPage
-              });
-            }
-            if (debugInfo) {
-              finalData = withDebug(finalData, debugInfo);
-            }
-
-            return successToolResult({ ...response, data: finalData });
+            effectiveResponse = { ...response, data: compactedData };
           }
 
-          if (autoPaginate || debugInfo || truncated) {
-            let finalData: unknown = response.data;
-            if (autoPaginate || truncated) {
-              finalData = withZoneResponseMeta(finalData, {
-                pagesFetched,
-                truncated,
-                truncatedReason,
-                nextPage
-              });
-            }
-            if (debugInfo) {
-              finalData = withDebug(finalData, debugInfo);
-            }
-            return successToolResult({ ...response, data: finalData });
-          }
+          const out = buildZoneDataEnvelope({
+            zone,
+            response: effectiveResponse,
+            page: startPage,
+            pageSize,
+            mode,
+            mcp:
+              autoPaginate || truncated
+                ? {
+                    autoPaginate,
+                    pagesFetched,
+                    truncated,
+                    truncatedReason,
+                    nextPage
+                  }
+                : undefined,
+            debug: debugInfo,
+            compactApplied,
+            select,
+            maxItems: args.maxItems
+          });
 
-          return successToolResult(response);
+          return successToolResult(out);
         } catch (error) {
-          return errorToolResult(error);
+          return errorToolResult(error, { mode, debug: { zone } });
         }
       }
     );

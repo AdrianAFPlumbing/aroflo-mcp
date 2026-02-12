@@ -13,11 +13,14 @@ In this MCP server, `where`, `order`, and `join` can be passed as either a singl
 Additional optional helpers on GET tools:
 
 - `autoPaginate`: fetches subsequent pages and merges `zoneresponse` arrays client-side
-- `maxResults` / `maxItemsTotal`: cap total merged items; returns `_mcp.truncated=true` + `_mcp.nextPage` when hit
+- `maxResults` / `maxItemsTotal`: cap total merged items; sets `mcp.truncated=true` + `nextPage` when hit
 - `maxPages`: cap page fetches when auto-paginating
 - `compact`, `select`, `maxItems`: reduce payload size (see below)
 - `validateWhere` (default true): validates WHERE fields against extracted zone docs and fails fast with a targeted message
-- `debug`: adds `_debug` metadata showing normalized query inputs
+- `mode`: `"data" | "verbose" | "debug" | "raw"` (default: `"data"`)
+  - `verbose`: include transport meta like http status + rate limits
+  - `debug`: include MCP internals like normalized params
+  - `raw`: include the raw AroFlo response payload
 
 Example: list Quotes with acceptance status "Awaiting Decision":
 
@@ -30,6 +33,30 @@ Tool: `aroflo_get_quotes`
   "pageSize": 50
 }
 ```
+
+## Response Shape (GET Tools)
+
+Default (`mode="data"`) response is intentionally small and stable:
+
+```json
+{
+  "zone": "Tasks",
+  "items": [],
+  "page": 1,
+  "pageSize": 200,
+  "count": 0,
+  "hasMore": false
+}
+```
+
+Optional fields:
+
+- `nextPage` when `hasMore=true`
+- `maxPageResults` if present in AroFlo `zoneresponse`
+- `mcp` when auto-pagination/capping was used (e.g. `{ "pagesFetched": 3, "truncated": true, "truncatedReason": "maxPages" }`)
+- `meta` only in `mode="verbose"|"debug"|"raw"`
+- `debug` only in `mode="debug"|"raw"`
+- `rawArofloResponse` only in `mode="raw"`
 
 ## API Docs Resources
 

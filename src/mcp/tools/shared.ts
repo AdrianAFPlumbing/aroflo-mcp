@@ -1,7 +1,6 @@
 import { z } from 'zod';
 
-import type { AroFloClientResponse } from '../../aroflo/types.js';
-import { AroFloError } from '../../utils/errors.js';
+import { AroFloError, isRetryableError } from '../../utils/errors.js';
 
 export const arofloToolOutputSchema = {
   httpStatus: z.number().int(),
@@ -19,7 +18,7 @@ export const arofloToolOutputSchema = {
   data: z.unknown()
 };
 
-export function successToolResult(payload: AroFloClientResponse) {
+export function successToolResult(payload: unknown) {
   return {
     structuredContent: payload as unknown as Record<string, unknown>,
     content: [
@@ -31,28 +30,38 @@ export function successToolResult(payload: AroFloClientResponse) {
   };
 }
 
-export function errorToolResult(error: unknown) {
-  const structured =
+export function errorToolResult(
+  error: unknown,
+  options?: { mode?: string; debug?: Record<string, unknown> }
+) {
+  const mode = (options?.mode ?? 'data').toLowerCase();
+  const includeDetails = mode === 'verbose' || mode === 'debug' || mode === 'raw';
+  const includeDebug = mode === 'debug' || mode === 'raw';
+
+  const retryable = isRetryableError(error);
+
+  const errorObj =
     error instanceof AroFloError
       ? {
           code: error.code,
           message: error.message,
-          statusCode: error.statusCode,
-          status: error.status,
-          details: error.details
+          httpStatus: error.statusCode,
+          retryable,
+          ...(includeDetails ? { details: error.details } : {})
         }
       : error instanceof Error
         ? {
             code: 'UNEXPECTED_ERROR',
-            name: error.name,
-            message: error.message
+            message: error.message,
+            retryable
           }
         : {
             code: 'UNEXPECTED_ERROR',
-            message: 'Unknown error'
+            message: 'Unknown error',
+            retryable
           };
 
-  const details =
+  const detailsText =
     error instanceof AroFloError
       ? `${error.message} [code=${error.code}${
           typeof error.status === 'undefined' ? '' : ` status=${error.status}`
@@ -61,13 +70,18 @@ export function errorToolResult(error: unknown) {
         ? error.message
         : 'Unknown error';
 
+  const structured: Record<string, unknown> = { error: errorObj };
+  if (includeDebug && options?.debug) {
+    structured.debug = options.debug;
+  }
+
   return {
     isError: true,
     structuredContent: structured as Record<string, unknown>,
     content: [
       {
         type: 'text' as const,
-        text: details
+        text: detailsText
       }
     ]
   };
