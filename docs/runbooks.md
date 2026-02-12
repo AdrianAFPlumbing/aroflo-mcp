@@ -15,7 +15,7 @@
 
 ## Invalid WHERE Clauses
 
-Common failure mode: pasting the SQL-ish “Default WHERE clause” text from `docs/api/*.md` into an MCP `where` argument.
+Common failure mode: pasting the SQL-ish \"Default WHERE clause\" text from `docs/api/*.md` into an MCP `where` argument.
 
 Correct AroFlo API WHERE clauses are pipe-delimited strings, for example:
 

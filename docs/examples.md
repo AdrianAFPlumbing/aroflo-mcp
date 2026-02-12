@@ -11,7 +11,7 @@ Tips:
 
 ## Quotes
 
-List quotes where acceptance status is “Awaiting Decision”:
+List quotes where acceptance status is \"Awaiting Decision\":
 
 - Tool: `aroflo_get_quotes`
 
@@ -23,7 +23,7 @@ List quotes where acceptance status is “Awaiting Decision”:
 }
 ```
 
-List “in progress” quotes and include line items:
+List \"in progress\" quotes and include line items:
 
 - Tool: `aroflo_get_quotes`
 
@@ -160,4 +160,3 @@ Fetch incremental changes for a zone since a timestamp (see `aroflo://docs/api/l
   "pageSize": 500
 }
 ```
-

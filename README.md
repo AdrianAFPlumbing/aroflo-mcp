@@ -137,7 +137,7 @@ The MCP server exposes these markdown files as MCP resources so the client/LLM c
 - `aroflo://docs/api` -> `docs/api/README.md`
 - `aroflo://docs/api/<slug>` -> `docs/api/<slug>.md` (example: `aroflo://docs/api/quotes`)
 
-Example query: list Quotes with acceptance status “Awaiting Decision”:
+Example query: list Quotes with acceptance status \"Awaiting Decision\":
 
 - Tool: `aroflo_get_quotes`
 - Args:
