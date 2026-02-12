@@ -154,6 +154,7 @@ Example query: list Quotes with acceptance status “Awaiting Decision”:
 
 - `docs/aroflo-auth.md`
 - `docs/mcp-tools.md`
+- `docs/examples.md`
 - `docs/runbooks.md`
 - `docs/deployment.md`
 - `docs/api/*`

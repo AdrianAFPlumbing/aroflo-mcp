@@ -33,6 +33,8 @@ In most cases the `<slug>` matches the tool suffix, e.g.:
 
 - tool `aroflo_get_quotes` -> resource `aroflo://docs/api/quotes`
 
+For a cookbook of common calls, see `docs/examples.md`.
+
 ## `aroflo_get_lastupdate`
 
 Query the `lastupdate` zone with optional zone and date filters.
