@@ -128,9 +128,32 @@ Set `MCP_TRANSPORT=http` to run an HTTP server (Streamable HTTP transport) at:
 
 - `http://${MCP_HTTP_HOST}:${MCP_HTTP_PORT}${MCP_HTTP_PATH}`
 
+## Using Extracted API Docs (`docs/api`)
+
+This repo includes a local snapshot of the AroFlo API docs in `docs/api/`.
+
+The MCP server exposes these markdown files as MCP resources so the client/LLM can look up valid WHERE fields, JOIN areas, etc:
+
+- `aroflo://docs/api` -> `docs/api/README.md`
+- `aroflo://docs/api/<slug>` -> `docs/api/<slug>.md` (example: `aroflo://docs/api/quotes`)
+
+Example query: list Quotes with acceptance status “Awaiting Decision”:
+
+- Tool: `aroflo_get_quotes`
+- Args:
+
+```json
+{
+  "where": "and|acceptancestatus|=|Awaiting Decision",
+  "page": 1,
+  "pageSize": 50
+}
+```
+
 ## Docs
 
 - `docs/aroflo-auth.md`
 - `docs/mcp-tools.md`
 - `docs/runbooks.md`
 - `docs/deployment.md`
+- `docs/api/*`

@@ -13,6 +13,18 @@
 - Reduce request frequency and increase request spacing.
 - Use paging and narrower WHERE clauses.
 
+## Invalid WHERE Clauses
+
+Common failure mode: pasting the SQL-ish “Default WHERE clause” text from `docs/api/*.md` into an MCP `where` argument.
+
+Correct AroFlo API WHERE clauses are pipe-delimited strings, for example:
+
+- `and|acceptancestatus|=|Awaiting Decision`
+
+Tip: the extracted zone docs are available via MCP resources:
+
+- `aroflo://docs/api/<slug>` (example: `aroflo://docs/api/quotes`)
+
 ## Clock Skew / Payload Expired
 
 - Sync system clock (NTP).

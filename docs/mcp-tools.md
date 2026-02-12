@@ -29,6 +29,10 @@ This server exposes the extracted API docs under MCP resources:
 - `aroflo://docs/api` -> `docs/api/README.md`
 - `aroflo://docs/api/<slug>` -> `docs/api/<slug>.md` (example: `aroflo://docs/api/quotes`)
 
+In most cases the `<slug>` matches the tool suffix, e.g.:
+
+- tool `aroflo_get_quotes` -> resource `aroflo://docs/api/quotes`
+
 ## `aroflo_get_lastupdate`
 
 Query the `lastupdate` zone with optional zone and date filters.
