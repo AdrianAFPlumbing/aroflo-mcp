@@ -9,6 +9,7 @@ import { registerQueryZoneTool } from './tools/query-zone.js';
 import { registerGetRecordTool } from './tools/get-record.js';
 import { registerMutateRecordTool } from './tools/mutate-record.js';
 import { registerZoneGetTools } from './tools/get-zones.js';
+import { registerReportTools } from './tools/reports.js';
 
 export function createAroFloClient(env: AppEnv): AroFloClient {
   return new AroFloClientImpl({
@@ -37,6 +38,7 @@ export function createAroFloMcpServer(client: AroFloClient): McpServer {
   registerGetRecordTool(server, client);
   registerMutateRecordTool(server, client);
   registerZoneGetTools(server, client);
+  registerReportTools(server, client);
   registerApiDocsResources(server);
 
   return server;

@@ -7,6 +7,14 @@ import {
   normalizeOrderParam,
   normalizeWhereParam
 } from '../../aroflo/normalize-params.js';
+import {
+  countZoneArrays,
+  getZoneResponse,
+  mergeZoneResponseData,
+  truncateZoneArrays,
+  withDebug,
+  withZoneResponseMeta
+} from '../../aroflo/paginate.js';
 import { compactZoneResponseData } from '../../aroflo/select.js';
 import { AROFLO_ZONES, zoneToToolSuffix } from '../../aroflo/zones.js';
 import { arofloToolOutputSchema, errorToolResult, successToolResult } from './shared.js';
@@ -21,6 +29,9 @@ const inputSchema = {
   join: stringOrStringArraySchema.optional(),
   page: z.number().int().positive().optional(),
   pageSize: z.number().int().positive().max(500).optional(),
+  autoPaginate: z.boolean().optional(),
+  maxResults: z.number().int().positive().max(5000).optional(),
+  debug: z.boolean().optional(),
   compact: z.boolean().optional(),
   select: z.array(z.string().min(1)).optional(),
   maxItems: z.number().int().positive().max(500).optional(),
@@ -59,14 +70,92 @@ export function registerZoneGetTools(server: McpServer, client: AroFloClient): v
           const order = normalizeOrderParam(args.order);
           const join = normalizeJoinParam(args.join);
 
-          const response = await client.get(zone, {
+          const autoPaginate = Boolean(args.autoPaginate);
+          const startPage = args.page ?? 1;
+          const pageSize = args.pageSize ?? (autoPaginate ? 200 : undefined);
+          const maxResults = args.maxResults;
+
+          const debugInfo: Record<string, unknown> | undefined = args.debug
+            ? {
+                zone,
+                normalized: {
+                  where,
+                  order,
+                  join,
+                  page: startPage,
+                  pageSize,
+                  extra: args.extra
+                }
+              }
+            : undefined;
+
+          let response = await client.get(zone, {
             where,
             order,
             join,
-            page: args.page,
-            pageSize: args.pageSize,
+            page: startPage,
+            pageSize,
             extra: args.extra
           });
+
+          let pagesFetched = 1;
+          let truncated = false;
+          let nextPage: number | undefined;
+
+          if (autoPaginate) {
+            let currentPage = startPage;
+            while (true) {
+              const zr = getZoneResponse(response.data);
+              const total = zr ? countZoneArrays(zr) : 0;
+
+              if (typeof maxResults === 'number' && total >= maxResults) {
+                truncated = true;
+                nextPage = currentPage + 1;
+                break;
+              }
+
+              const mainArrayLen = zr ? total : 0;
+              if (typeof pageSize === 'number' && mainArrayLen < pageSize) {
+                break;
+              }
+
+              currentPage += 1;
+              const next = await client.get(zone, {
+                where,
+                order,
+                join,
+                page: currentPage,
+                pageSize,
+                extra: args.extra
+              });
+
+              pagesFetched += 1;
+
+              // If the next page contributes nothing, stop.
+              const nextZr = getZoneResponse(next.data);
+              const nextCount = nextZr ? countZoneArrays(nextZr) : 0;
+              if (nextCount === 0) {
+                break;
+              }
+
+              response = { ...response, data: mergeZoneResponseData(response.data, next.data).merged };
+
+              // Stop if the last page was short.
+              if (typeof pageSize === 'number' && nextCount < pageSize) {
+                break;
+              }
+            }
+          }
+
+          if (typeof maxResults === 'number') {
+            const zr = getZoneResponse(response.data);
+            const total = zr ? countZoneArrays(zr) : 0;
+            if (total > maxResults) {
+              const { truncated: newData } = truncateZoneArrays(response.data, maxResults);
+              response = { ...response, data: newData };
+              truncated = true;
+            }
+          }
 
           if (args.compact || (args.select && args.select.length > 0) || args.maxItems) {
             const defaultSelect =
@@ -93,7 +182,26 @@ export function registerZoneGetTools(server: McpServer, client: AroFloClient): v
               select: args.select ?? defaultSelect,
               maxItems: args.maxItems
             });
-            return successToolResult({ ...response, data: compactedData });
+            let finalData: unknown = compactedData;
+            if (autoPaginate || truncated) {
+              finalData = withZoneResponseMeta(finalData, { pagesFetched, truncated, nextPage });
+            }
+            if (debugInfo) {
+              finalData = withDebug(finalData, debugInfo);
+            }
+
+            return successToolResult({ ...response, data: finalData });
+          }
+
+          if (autoPaginate || debugInfo || truncated) {
+            let finalData: unknown = response.data;
+            if (autoPaginate || truncated) {
+              finalData = withZoneResponseMeta(finalData, { pagesFetched, truncated, nextPage });
+            }
+            if (debugInfo) {
+              finalData = withDebug(finalData, debugInfo);
+            }
+            return successToolResult({ ...response, data: finalData });
           }
 
           return successToolResult(response);
