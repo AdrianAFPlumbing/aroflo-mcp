@@ -153,17 +153,87 @@ function scoreTextMatch(a: string, b: string): number {
   while (i < max && a[i] === b[i]) i += 1;
   const prefixScore = i / Math.max(a.length, b.length);
 
-  // Token overlap as a fallback.
-  const aTokens = new Set(tokenize(a));
-  const bTokens = new Set(tokenize(b));
-  let inter = 0;
-  for (const t of aTokens) {
-    if (bTokens.has(t)) inter += 1;
-  }
-  const denom = Math.max(aTokens.size, bTokens.size) || 1;
-  const tokenScore = inter / denom;
+  // Token-based similarity that is robust to truncated names.
+  // We downweight matches where the smaller side has very few tokens to avoid false positives
+  // (e.g. "pool" matching any "pool ..." item).
+  const stopwords = new Set([
+    'the',
+    'and',
+    'or',
+    'of',
+    'to',
+    'a',
+    'an',
+    'in',
+    'on',
+    'for',
+    'with',
+    'including',
+    'incl',
+    'supply',
+    'installation',
+    'install',
+    'allowance',
+    'provisional',
+    'sum',
+    'labour',
+    'material',
+    'materials'
+  ]);
 
-  return Math.max(prefixScore, tokenScore);
+  function filteredTokens(text: string): string[] {
+    const tokens = tokenize(text).filter((t) => t.length >= 3 && !stopwords.has(t));
+    // Drop a trailing 1-2 char token (common when AroFlo task names are truncated).
+    if (tokens.length >= 2) {
+      const last = tokens[tokens.length - 1] ?? '';
+      if (last.length <= 2) {
+        return tokens.slice(0, -1);
+      }
+    }
+    return tokens;
+  }
+
+  const aList = filteredTokens(a);
+  const bList = filteredTokens(b);
+  if (aList.length === 0 || bList.length === 0) {
+    return prefixScore;
+  }
+
+  const aSet = new Set(aList);
+  const bSet = new Set(bList);
+
+  let inter = 0;
+  for (const t of aSet) {
+    if (bSet.has(t)) inter += 1;
+  }
+
+  const minSize = Math.min(aSet.size, bSet.size) || 1;
+  const unionSize = aSet.size + bSet.size - inter || 1;
+
+  const strength = Math.min(1, minSize / 4);
+  const coverageScore = (inter / minSize) * strength;
+  const jaccardScore = (inter / unionSize) * strength;
+
+  // Prefix token match is very strong when there are at least 2-3 meaningful tokens.
+  function isPrefixTokens(shorter: string[], longer: string[]): boolean {
+    if (shorter.length === 0) return false;
+    if (shorter.length > longer.length) return false;
+    for (let idx = 0; idx < shorter.length; idx += 1) {
+      if (shorter[idx] !== longer[idx]) return false;
+    }
+    return true;
+  }
+
+  let prefixTokenScore = 0;
+  if (aList.length >= 2 && bList.length >= 2) {
+    const shorter = aList.length <= bList.length ? aList : bList;
+    const longer = aList.length <= bList.length ? bList : aList;
+    if (isPrefixTokens(shorter, longer)) {
+      prefixTokenScore = shorter.length >= 3 ? 0.95 : 0.85;
+    }
+  }
+
+  return Math.max(prefixScore, coverageScore, jaccardScore, prefixTokenScore);
 }
 
 function isCevTakeoffName(value: unknown): boolean {
@@ -1567,24 +1637,30 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
             const labourUnitHours = toNumber(li.labourunitrate);
             const rawHours = qty * labourUnitHours;
             const amountEx = toNumber(li.totalex);
-            const sign = amountEx < 0 ? -1 : 1;
+            const isCredit = amountEx < 0;
 
             const title = firstLine(li.item);
             const titleClean = cleanTextForMatch(title);
 
-            const plannedHours = sign * Math.abs(rawHours);
-            const plannedLabourCostEx = sign * Math.abs(toNumber(li.labourtotal));
+            // AroFlo quote.totalhours appears to be computed as the sum of (qty * labourunitrate)
+            // for parent QuoteLineItems, without applying a negative sign to credits/discounts.
+            // For budgeting, we only apply the credit sign within the explicit CEV section.
+            const plannedHours = Math.abs(rawHours);
+            const isCev = isCevTakeoffName(li.takeoffname);
+            const budgetHours = isCev ? (isCredit ? -plannedHours : plannedHours) : plannedHours;
 
             return {
               lineid: li.lineid,
               takeoffname: li.takeoffname,
+              isCev,
+              isCredit,
               itemTitle: title,
               itemTitleClean: titleClean,
               totalex: amountEx,
               qty,
               labourunitrate: labourUnitHours,
               plannedHours,
-              plannedLabourCostEx
+              budgetHours
             };
           })
           .filter((li) => {
@@ -1594,22 +1670,18 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
           });
 
         const plannedHoursTotal = plannedItems.reduce((sum, li) => sum + li.plannedHours, 0);
-        const plannedLabourCostTotal = plannedItems.reduce(
-          (sum, li) => sum + li.plannedLabourCostEx,
-          0
-        );
+        const budgetHoursTotal = plannedItems.reduce((sum, li) => sum + li.budgetHours, 0);
 
-        const cevItems = plannedItems.filter((li) => isCevTakeoffName(li.takeoffname));
-        const cevHoursNet = cevItems.reduce((sum, li) => sum + li.plannedHours, 0);
-        const cevHoursPositive = cevItems.reduce(
-          (sum, li) => sum + Math.max(0, li.plannedHours),
-          0
-        );
-        const cevHoursNegative = cevItems.reduce(
-          (sum, li) => sum + Math.min(0, li.plannedHours),
-          0
-        );
-        const baseHours = plannedHoursTotal - cevHoursNet;
+        const cevItems = plannedItems.filter((li) => li.isCev);
+        const cevHoursUnsigned = cevItems.reduce((sum, li) => sum + li.plannedHours, 0);
+        const cevHoursNet = cevItems.reduce((sum, li) => sum + li.budgetHours, 0);
+        const cevHoursPositive = cevItems.reduce((sum, li) => sum + Math.max(0, li.budgetHours), 0);
+        const cevHoursNegative = cevItems.reduce((sum, li) => sum + Math.min(0, li.budgetHours), 0);
+
+        const baseHours = plannedItems
+          .filter((li) => !li.isCev)
+          .reduce((sum, li) => sum + li.plannedHours, 0);
+        const allowedHoursAdjusted = baseHours + cevHoursNet;
 
         const quoteHeaderAllowedHours = toNumber(quoteFull.totalhours);
         const quoteHeaderLabourCostEx = toNumber(quoteFull.labourcostex);
@@ -1726,8 +1798,12 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
 
         const unmatchedItems = plannedItems.filter((_, idx) => !usedPlannedIndices.has(idx));
 
+        const overrunHoursVsAllowed = actualHoursTotal - allowedHoursAdjusted;
+        const overrunCostExAtQuoteRateVsAllowed = overrunHoursVsAllowed * quoteLabourRateExPerHour;
+
         const overrunHoursVsQuoteHeader = actualHoursTotal - quoteHeaderAllowedHours;
-        const overrunCostExAtQuoteRate = overrunHoursVsQuoteHeader * quoteLabourRateExPerHour;
+        const overrunCostExAtQuoteRateVsQuoteHeader =
+          overrunHoursVsQuoteHeader * quoteLabourRateExPerHour;
 
         const out: Record<string, unknown> = {
           summary: {
@@ -1763,18 +1839,22 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
               quoteHeaderLabourCostEx: quoteHeaderLabourCostEx,
               quoteLabourRateExPerHour: quoteLabourRateExPerHour,
               plannedHoursFromAssemblies: plannedHoursTotal,
-              plannedLabourCostFromAssembliesEx: plannedLabourCostTotal,
+              baseHours,
+              allowedHoursAdjusted,
+              allowedLabourCostExAtQuoteRate: allowedHoursAdjusted * quoteLabourRateExPerHour,
               creditsExtrasVariations: {
                 present: cevItems.length > 0,
+                unsignedHours: cevHoursUnsigned,
                 netHours: cevHoursNet,
                 positiveHours: cevHoursPositive,
-                negativeHours: cevHoursNegative,
-                baseHours: baseHours
+                negativeHours: cevHoursNegative
               }
             },
             variance: {
+              overrunHoursVsAllowed,
+              overrunLabourCostExAtQuoteRateVsAllowed: overrunCostExAtQuoteRateVsAllowed,
               overrunHoursVsQuoteHeader: overrunHoursVsQuoteHeader,
-              overrunLabourCostExAtQuoteRate: overrunCostExAtQuoteRate
+              overrunLabourCostExAtQuoteRateVsQuoteHeader: overrunCostExAtQuoteRateVsQuoteHeader
             },
             mapping: {
               taskCount: taskBreakdown.length,
@@ -1795,7 +1875,9 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
             takeoffname: li.takeoffname,
             itemTitle: li.itemTitle,
             plannedHours: li.plannedHours,
-            plannedLabourCostEx: li.plannedLabourCostEx,
+            budgetHours: li.budgetHours,
+            isCev: li.isCev,
+            isCredit: li.isCredit,
             totalex: li.totalex
           }));
           out.unmatchedQuoteItemsSummary = {
