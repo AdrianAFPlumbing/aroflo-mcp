@@ -69,11 +69,39 @@ Audit a project against a quote (actual vs allowed labour hours) and include a p
 
 ```json
 {
-  "quoteRefno": "Luic21",
-  "includeUnmatchedQuoteItems": false,
+  "projectRefno": "Luic1",
+  "matchThreshold": 0.3,
+  "includeUnmatchedQuoteItems": true,
+  "maxUnmatchedQuoteItems": 200,
   "mode": "data"
 }
 ```
+
+Notes:
+
+- You can pass either:
+  - `projectRefno` (preferred when the user refers to the project, e.g. "Luic1"), or
+  - `quoteRefno` / `quoteId` / `jobNumber` (when you already have the quote/job context).
+- Quotes often contain assemblies/line-items that do not exist as a 1:1 project task (and a single quoted
+  assembly can be split into multiple subtasks in the project). For reporting:
+  - enable `includeUnmatchedQuoteItems` to surface quote assemblies that have planned hours but no matching
+    project task
+  - when multiple tasks match the same quote item, planned hours are allocated across tasks to avoid
+    double-counting in the task breakdown
+- When rendering a human-facing task table, sort tasks so `Completed` appears at the bottom of the report
+  (for example: `In Progress`, `Not Started`, then `Completed`). If a synthetic `status=="Quote"` task is
+  present, keep it at the very bottom or omit it from the human table.
+
+PDF workflow (outside MCP, optional):
+
+1. Call the audit tool (`mode:"data"`) to get structured results.
+2. Generate a single HTML file (inline CSS) containing:
+   - summary at top: project, quote, job number, actual hours, allowed hours, overrun hours, overrun cost (ex)
+   - CEV summary: base hours, CEV net/positive/negative hours
+   - detailed table: every project task row (Actual, Planned, Variance, Status, matched quote title)
+   - unmatched quote assemblies table (when `includeUnmatchedQuoteItems:true`)
+3. Print to PDF using Chrome headless:
+   - `"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --disable-gpu --print-to-pdf="<pdfPath>" "<htmlPath>"`
 
 List open projects (client-side filtering on `status=="open"` + `closeddate==""`):
 
