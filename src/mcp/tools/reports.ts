@@ -1637,17 +1637,16 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
             const labourUnitHours = toNumber(li.labourunitrate);
             const rawHours = qty * labourUnitHours;
             const amountEx = toNumber(li.totalex);
-            const isCredit = amountEx < 0;
 
             const title = firstLine(li.item);
             const titleClean = cleanTextForMatch(title);
 
-            // AroFlo quote.totalhours appears to be computed as the sum of (qty * labourunitrate)
-            // for parent QuoteLineItems, without applying a negative sign to credits/discounts.
-            // For budgeting, we only apply the credit sign within the explicit CEV section.
-            const plannedHours = Math.abs(rawHours);
+            // AroFlo quote.totalhours appears to match the raw sum of (qty * labourunitrate) for
+            // parent QuoteLineItems (i.e. credits can show up as negative hours on the line item).
+            const plannedHours = rawHours;
             const isCev = isCevTakeoffName(li.takeoffname);
-            const budgetHours = isCev ? (isCredit ? -plannedHours : plannedHours) : plannedHours;
+            const mappingHours = Math.max(0, plannedHours);
+            const isCredit = plannedHours < 0 || amountEx < 0;
 
             return {
               lineid: li.lineid,
@@ -1660,7 +1659,7 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
               qty,
               labourunitrate: labourUnitHours,
               plannedHours,
-              budgetHours
+              mappingHours
             };
           })
           .filter((li) => {
@@ -1670,13 +1669,18 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
           });
 
         const plannedHoursTotal = plannedItems.reduce((sum, li) => sum + li.plannedHours, 0);
-        const budgetHoursTotal = plannedItems.reduce((sum, li) => sum + li.budgetHours, 0);
 
         const cevItems = plannedItems.filter((li) => li.isCev);
-        const cevHoursUnsigned = cevItems.reduce((sum, li) => sum + li.plannedHours, 0);
-        const cevHoursNet = cevItems.reduce((sum, li) => sum + li.budgetHours, 0);
-        const cevHoursPositive = cevItems.reduce((sum, li) => sum + Math.max(0, li.budgetHours), 0);
-        const cevHoursNegative = cevItems.reduce((sum, li) => sum + Math.min(0, li.budgetHours), 0);
+        const cevHoursUnsigned = cevItems.reduce((sum, li) => sum + Math.abs(li.plannedHours), 0);
+        const cevHoursNet = cevItems.reduce((sum, li) => sum + li.plannedHours, 0);
+        const cevHoursPositive = cevItems.reduce(
+          (sum, li) => sum + Math.max(0, li.plannedHours),
+          0
+        );
+        const cevHoursNegative = cevItems.reduce(
+          (sum, li) => sum + Math.min(0, li.plannedHours),
+          0
+        );
 
         const baseHours = plannedItems
           .filter((li) => !li.isCev)
@@ -1757,7 +1761,7 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
         const taskBreakdown = taskCandidates.map((t, idx) => {
           const m = assigned[idx];
           const li = typeof m !== 'undefined' ? itemCandidates[m.itemIndex] : undefined;
-          const plannedHours = li ? (li as any).plannedHours : 0;
+          const plannedHours = li ? (li as any).mappingHours : 0;
           const actualHours = toNumber((t as any).actualHours);
           const matchScore = m ? m.score : 0;
           return {
@@ -1875,7 +1879,7 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
             takeoffname: li.takeoffname,
             itemTitle: li.itemTitle,
             plannedHours: li.plannedHours,
-            budgetHours: li.budgetHours,
+            mappingHours: li.mappingHours,
             isCev: li.isCev,
             isCredit: li.isCredit,
             totalex: li.totalex
