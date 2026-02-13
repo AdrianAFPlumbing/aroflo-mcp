@@ -1723,10 +1723,19 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
           }))
           .filter((li) => li.itemTitleClean.length > 0);
 
+        // NOTE: Quotes can contain "tasks" (assemblies) that do not exist as a 1:1 project task, and
+        // projects can split a single quote assembly into multiple subtasks. We therefore allow
+        // many tasks to map to the same quote item, but still only pick a single "best" quote item per task.
+        //
+        // To avoid double-counting planned hours in the task table, we allocate an item's planned
+        // mapping hours across all tasks mapped to it (weighted by match score).
         type Match = { taskIndex: number; itemIndex: number; score: number };
         const matches: Match[] = [];
         for (let ti = 0; ti < taskCandidates.length; ti += 1) {
           const t = taskCandidates[ti] as any;
+          // Exclude the synthetic quote-bridge task (status=Quote) from matching/allocation.
+          if (String(t.status ?? '').toLowerCase() === 'quote') continue;
+
           const a = String(t.tasknameClean ?? '');
           if (!a) continue;
 
@@ -1745,23 +1754,43 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
         matches.sort((a, b) => b.score - a.score);
 
         const usedTasks = new Set<number>();
-        const usedItems = new Set<number>();
         const usedPlannedIndices = new Set<number>();
         const assigned: Record<number, Match> = {};
+        const tasksByItemIndex = new Map<number, number[]>();
 
+        // Greedy "best match per task" assignment: because matches are score-sorted, the first time
+        // we see a task index is its best-scoring match.
         for (const m of matches) {
           if (usedTasks.has(m.taskIndex)) continue;
-          if (usedItems.has(m.itemIndex)) continue;
           usedTasks.add(m.taskIndex);
-          usedItems.add(m.itemIndex);
-          usedPlannedIndices.add((itemCandidates[m.itemIndex] as any).plannedIndex as number);
           assigned[m.taskIndex] = m;
+          usedPlannedIndices.add((itemCandidates[m.itemIndex] as any).plannedIndex as number);
+          const arr = tasksByItemIndex.get(m.itemIndex) ?? [];
+          arr.push(m.taskIndex);
+          tasksByItemIndex.set(m.itemIndex, arr);
+        }
+
+        // Allocate each quote item's planned mapping hours across its mapped tasks to prevent
+        // planned-hour double counting in the task breakdown.
+        const plannedHoursByTaskIndex: Record<number, number> = {};
+        for (const [itemIndex, taskIndexes] of tasksByItemIndex.entries()) {
+          const li = itemCandidates[itemIndex] as any;
+          const mappingHours = toNumber(li.mappingHours);
+          const totalScore = taskIndexes.reduce((sum, ti) => sum + (assigned[ti]?.score ?? 0), 0);
+          const fallbackWeight = taskIndexes.length > 0 ? 1 / taskIndexes.length : 0;
+
+          for (const ti of taskIndexes) {
+            const s = assigned[ti]?.score ?? 0;
+            const w = totalScore > 0 ? s / totalScore : fallbackWeight;
+            plannedHoursByTaskIndex[ti] = mappingHours * w;
+          }
         }
 
         const taskBreakdown = taskCandidates.map((t, idx) => {
           const m = assigned[idx];
           const li = typeof m !== 'undefined' ? itemCandidates[m.itemIndex] : undefined;
-          const plannedHours = li ? (li as any).mappingHours : 0;
+          const plannedHours =
+            typeof m !== 'undefined' ? toNumber(plannedHoursByTaskIndex[idx]) : 0;
           const actualHours = toNumber((t as any).actualHours);
           const matchScore = m ? m.score : 0;
           return {
