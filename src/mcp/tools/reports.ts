@@ -51,6 +51,12 @@ function getQuotesArray(data: unknown): unknown[] {
   return Array.isArray(quotes) ? quotes : [];
 }
 
+function getQuoteLineItemsArray(data: unknown): unknown[] {
+  const zr = getZoneResponse(data);
+  const items = zr?.['quotelineitems'];
+  return Array.isArray(items) ? items : [];
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -104,6 +110,75 @@ function isoDateMinusDays(days: number): string {
   const d = new Date();
   d.setUTCDate(d.getUTCDate() - days);
   return d.toISOString().slice(0, 10); // YYYY-MM-DD
+}
+
+function firstLine(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  const idx = value.indexOf('\n');
+  return (idx === -1 ? value : value.slice(0, idx)).trim();
+}
+
+function cleanTextForMatch(value: unknown): string {
+  const line = firstLine(value);
+  if (!line) return '';
+  return line
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function tokenize(text: string): string[] {
+  return text
+    .split(' ')
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
+
+function scoreTextMatch(a: string, b: string): number {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+
+  // Strong signal: one is a prefix of the other (common with truncated task names).
+  if (a.startsWith(b) || b.startsWith(a)) {
+    const shorter = Math.min(a.length, b.length);
+    const longer = Math.max(a.length, b.length);
+    return shorter / longer;
+  }
+
+  // Common prefix length as a weaker signal.
+  let i = 0;
+  const max = Math.min(a.length, b.length);
+  while (i < max && a[i] === b[i]) i += 1;
+  const prefixScore = i / Math.max(a.length, b.length);
+
+  // Token overlap as a fallback.
+  const aTokens = new Set(tokenize(a));
+  const bTokens = new Set(tokenize(b));
+  let inter = 0;
+  for (const t of aTokens) {
+    if (bTokens.has(t)) inter += 1;
+  }
+  const denom = Math.max(aTokens.size, bTokens.size) || 1;
+  const tokenScore = inter / denom;
+
+  return Math.max(prefixScore, tokenScore);
+}
+
+function isCevTakeoffName(value: unknown): boolean {
+  // Accept minor variations/spelling differences. We match on the normalized tokens.
+  const t = cleanTextForMatch(value);
+  return t.includes('credits') && t.includes('extras') && t.includes('variations');
+}
+
+function isIgnorableQuoteItemTitle(value: unknown): boolean {
+  const t = cleanTextForMatch(value);
+  if (!t) return true;
+  if (t.startsWith('please note')) return true;
+  if (t.startsWith('please initial')) return true;
+  if (t.startsWith('please sign')) return true;
+  return false;
 }
 
 export function registerReportTools(server: McpServer, client: AroFloClient): void {
@@ -812,6 +887,947 @@ export function registerReportTools(server: McpServer, client: AroFloClient): vo
         return errorToolResult(error, {
           mode,
           debug: { tool: 'aroflo_resolve_job_context' }
+        });
+      }
+    }
+  );
+
+  server.registerTool(
+    'aroflo_report_project_labour_budget_audit',
+    {
+      title: 'AroFlo: Report Project Labour Budget Audit',
+      description:
+        "Audit a project's actual labour hours against the linked quote's allowed labour hours, including a planned-vs-actual breakdown by task. " +
+        'Uses quote assemblies (parent QuoteLineItems only) as the planned-hour source to avoid double counting children. ' +
+        'Highlights the "Credits, Extras & Variations" section when present.',
+      inputSchema: {
+        jobNumber: z.union([z.number().int().positive(), z.string().regex(/^\\d+$/)]).optional(),
+        quoteId: z.string().min(1).optional(),
+        quoteRefno: z.string().min(1).optional(),
+        projectId: z.string().min(1).optional(),
+        projectRefno: z.string().min(1).optional(),
+
+        // Scan controls (used when we need to search by refno/refcode).
+        quoteSinceCreatedDate: z.string().min(1).optional(),
+        projectSinceCreatedUtc: z.string().min(1).optional(),
+        taskSinceDateRequested: z.string().min(1).optional(),
+        quoteStatuses: z.array(z.string().min(1)).optional(),
+
+        // Caps / paging.
+        pageSize: z.number().int().positive().max(500).default(200),
+        maxQuotesScanned: z.number().int().positive().max(10000).default(2000),
+        maxProjectsScanned: z.number().int().positive().max(10000).default(2000),
+        maxTasksScanned: z.number().int().positive().max(20000).default(4000),
+        maxQuoteLineItems: z.number().int().positive().max(5000).default(4000),
+
+        // Matching controls.
+        matchThreshold: z.number().min(0).max(1).default(0.55),
+
+        // Output controls.
+        includeUnmatchedQuoteItems: z.boolean().default(false),
+        maxUnmatchedQuoteItems: z.number().int().positive().max(200).default(50),
+
+        mode: z.enum(['data', 'verbose', 'debug', 'raw']).optional(),
+        verbose: z.boolean().optional(),
+        debug: z.boolean().optional()
+      },
+      outputSchema: z.object({}).passthrough(),
+      annotations: {
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: true
+      }
+    },
+    async (args) => {
+      const mode = resolveOutputMode(args);
+      try {
+        const explanations: string[] = [];
+        const warnings: string[] = [];
+        const debugInfo: Record<string, unknown> = {};
+
+        // Handlers are unit-tested by calling them directly (bypassing MCP SDK input parsing),
+        // so we defensively apply schema defaults here as well.
+        const pageSize = typeof args.pageSize === 'number' ? args.pageSize : 200;
+        const maxQuotesScanned =
+          typeof args.maxQuotesScanned === 'number' ? args.maxQuotesScanned : 2000;
+        const maxProjectsScanned =
+          typeof args.maxProjectsScanned === 'number' ? args.maxProjectsScanned : 2000;
+        const maxTasksScanned =
+          typeof args.maxTasksScanned === 'number' ? args.maxTasksScanned : 4000;
+        const maxQuoteLineItems =
+          typeof args.maxQuoteLineItems === 'number' ? args.maxQuoteLineItems : 4000;
+        const matchThreshold = typeof args.matchThreshold === 'number' ? args.matchThreshold : 0.55;
+        const includeUnmatchedQuoteItems = args.includeUnmatchedQuoteItems === true;
+        const maxUnmatchedQuoteItems =
+          typeof args.maxUnmatchedQuoteItems === 'number' ? args.maxUnmatchedQuoteItems : 50;
+
+        const normalizedQuoteRefno = normalizeComparableText(args.quoteRefno);
+        const normalizedProjectRefno = normalizeComparableText(args.projectRefno);
+
+        const defaultSinceDate = isoDateMinusDays(365);
+        const quoteSinceCreatedDate = args.quoteSinceCreatedDate ?? defaultSinceDate;
+        const projectSinceCreatedUtc = args.projectSinceCreatedUtc ?? defaultSinceDate;
+        const taskSinceDateRequested = args.taskSinceDateRequested ?? defaultSinceDate;
+
+        const quoteStatuses =
+          args.quoteStatuses && args.quoteStatuses.length > 0
+            ? args.quoteStatuses
+            : ['In Progress', 'Approved', 'Pending Approval', 'Rejected'];
+
+        // ---------------------------------------------------------------------
+        // 1) Resolve inputs into a (project, quote, jobNumber) context.
+        // ---------------------------------------------------------------------
+
+        let resolvedJobNumber: number | undefined = parseJobNumber(args.jobNumber);
+        let resolvedProject: Record<string, unknown> | undefined;
+        let resolvedQuote: Record<string, unknown> | undefined;
+
+        if (
+          !resolvedJobNumber &&
+          !args.quoteId &&
+          !normalizedQuoteRefno &&
+          !args.projectId &&
+          !normalizedProjectRefno
+        ) {
+          throw new Error(
+            'Provide at least one of: jobNumber, quoteId, quoteRefno, projectId, projectRefno.'
+          );
+        }
+
+        // 1a) Resolve project by ID.
+        if (args.projectId) {
+          const res = await client.get('Projects', {
+            where: normalizeWhereParam([`and|projectid|=|${args.projectId}`]),
+            page: 1,
+            pageSize: 1
+          });
+          const projects = getProjectsArray(res.data);
+          const p = projects[0];
+          if (isRecord(p)) {
+            resolvedProject = p;
+            explanations.push('Resolved project via projectId.');
+          } else {
+            warnings.push('No project found for provided projectId.');
+          }
+        }
+
+        // 1b) Resolve project by refno (open projects scan).
+        if (!resolvedProject && normalizedProjectRefno) {
+          const whereClauses: string[] = [];
+          if (projectSinceCreatedUtc) {
+            whereClauses.push(`and|createdutc|>|${projectSinceCreatedUtc}`);
+          }
+          const where = normalizeWhereParam(whereClauses);
+
+          let res = await client.get('Projects', { where, page: 1, pageSize });
+          let pagesFetched = 1;
+          let scanned = 0;
+          let found: Record<string, unknown> | undefined;
+          let truncated = false;
+
+          while (true) {
+            const projects = getProjectsArray(res.data);
+            scanned += projects.length;
+
+            const openProjects = pickOpenProjects(projects);
+            for (const p of openProjects) {
+              if (!isRecord(p)) continue;
+              const refno = normalizeComparableText(p.refno);
+              if (refno && refno === normalizedProjectRefno) {
+                found = p;
+                break;
+              }
+            }
+            if (found) break;
+
+            if (scanned >= maxProjectsScanned) {
+              truncated = true;
+              break;
+            }
+
+            if (projects.length < pageSize) break;
+
+            const nextPage = pagesFetched + 1;
+            const next = await client.get('Projects', { where, page: nextPage, pageSize });
+            pagesFetched = nextPage;
+            res = next;
+            if (getProjectsArray(res.data).length === 0) break;
+          }
+
+          debugInfo.projectScan = { where, pagesFetched, scanned, truncated };
+
+          if (found) {
+            resolvedProject = found;
+            explanations.push('Resolved project via open-project scan on projectRefno.');
+          } else {
+            warnings.push(
+              truncated
+                ? 'Project not found for projectRefno within scan cap.'
+                : 'Project not found for projectRefno in scanned window.'
+            );
+          }
+        }
+
+        // 1c) Resolve quote by quoteId (direct).
+        if (args.quoteId) {
+          const res = await client.get('Quotes', {
+            where: normalizeWhereParam([`and|quoteid|=|${args.quoteId}`]),
+            join: ['project'],
+            page: 1,
+            pageSize: 1
+          });
+          const q = getQuotesArray(res.data)[0];
+          if (isRecord(q)) {
+            resolvedQuote = q;
+            explanations.push('Resolved quote via quoteId.');
+            const jn = parseJobNumber(q.jobnumber);
+            if (jn) {
+              resolvedJobNumber = resolvedJobNumber ?? jn;
+            } else {
+              warnings.push(
+                'Quote found for quoteId, but quote.jobnumber was missing/non-numeric.'
+              );
+            }
+          } else {
+            warnings.push('No quote found for provided quoteId.');
+          }
+        }
+
+        // 1d) Resolve quote by quoteRefno (bounded scan).
+        if (!resolvedQuote && normalizedQuoteRefno) {
+          let scanned = 0;
+          let truncated = false;
+          let found: Record<string, unknown> | undefined;
+          const scanMeta: Record<string, unknown> = { byStatus: [] as any[] };
+
+          for (const status of quoteStatuses) {
+            let page = 1;
+            let pagesFetched = 0;
+            while (true) {
+              const whereClauses: string[] = [`and|status|=|${status}`];
+              if (quoteSinceCreatedDate) {
+                whereClauses.push(`and|createddate|>|${quoteSinceCreatedDate}`);
+              }
+              const where = normalizeWhereParam(whereClauses);
+
+              const res = await client.get('Quotes', {
+                where,
+                join: ['project'],
+                page,
+                pageSize
+              });
+              pagesFetched += 1;
+
+              const quotes = getQuotesArray(res.data);
+              scanned += quotes.length;
+
+              for (const q of quotes) {
+                if (!isRecord(q)) continue;
+                const refno = normalizeComparableText(q.refno);
+                if (refno && refno === normalizedQuoteRefno) {
+                  found = q;
+                  break;
+                }
+              }
+
+              if (found) {
+                (scanMeta.byStatus as any[]).push({ status, pagesFetched, found: true, where });
+                break;
+              }
+              if (scanned >= maxQuotesScanned) {
+                truncated = true;
+                (scanMeta.byStatus as any[]).push({ status, pagesFetched, truncated: true, where });
+                break;
+              }
+              if (quotes.length < pageSize) {
+                (scanMeta.byStatus as any[]).push({ status, pagesFetched, where });
+                break;
+              }
+              page += 1;
+            }
+
+            if (found || truncated) break;
+          }
+
+          debugInfo.quoteScan = {
+            scanned,
+            truncated,
+            quoteSinceCreatedDate,
+            quoteStatuses,
+            scanMeta
+          };
+
+          if (found) {
+            resolvedQuote = found;
+            explanations.push(
+              'Resolved quote via bounded scan: quoteRefno match across allowed statuses.'
+            );
+            const jn = parseJobNumber(found.jobnumber);
+            if (jn) {
+              resolvedJobNumber = resolvedJobNumber ?? jn;
+            } else {
+              warnings.push(
+                'Quote matched quoteRefno but quote.jobnumber was missing/non-numeric.'
+              );
+            }
+          } else {
+            warnings.push(
+              truncated
+                ? `Quote not found for quoteRefno within scan cap (maxQuotesScanned=${maxQuotesScanned}).`
+                : 'Quote not found for quoteRefno in scanned window.'
+            );
+          }
+        }
+
+        // 1e) If we have a jobNumber, try to resolve project via the quote task (Tasks(jobnumber) join project).
+        if (!resolvedProject && resolvedJobNumber) {
+          const tasksRes = await client.get('Tasks', {
+            where: normalizeWhereParam([`and|jobnumber|=|${resolvedJobNumber}`]),
+            join: ['project', 'tasktotals'],
+            page: 1,
+            pageSize
+          });
+          const tasks = getTasksArray(tasksRes.data).filter(isRecord);
+          const firstWithProject = tasks.find(
+            (t) => isRecord(t.project) && typeof (t.project as any).projectid === 'string'
+          );
+          if (firstWithProject && isRecord(firstWithProject.project)) {
+            resolvedProject = firstWithProject.project as Record<string, unknown>;
+            explanations.push('Resolved project via Tasks(jobnumber) join=project.');
+          } else {
+            warnings.push('Could not resolve project via Tasks(jobnumber) join=project.');
+          }
+        }
+
+        // 1f) If we have a project but still no quote/jobnumber, attempt to find quote task(s) for the project.
+        let quoteTaskForProject: Record<string, unknown> | undefined;
+        if (resolvedProject && !resolvedQuote && !resolvedJobNumber) {
+          const clientOrg = isRecord(resolvedProject.client) ? resolvedProject.client : undefined;
+          const clientId =
+            clientOrg && typeof clientOrg.orgid === 'string'
+              ? (clientOrg.orgid as string)
+              : undefined;
+          const projectId =
+            typeof resolvedProject.projectid === 'string'
+              ? (resolvedProject.projectid as string)
+              : undefined;
+
+          if (clientId && projectId) {
+            const whereClauses: string[] = [
+              // NOTE: clientid is supported by the API even though it's missing from extracted docs.
+              `and|clientid|=|${clientId}`,
+              `and|status|=|Quote`
+            ];
+            if (taskSinceDateRequested) {
+              whereClauses.push(`and|daterequested|>|${taskSinceDateRequested}`);
+            }
+            const where = normalizeWhereParam(whereClauses);
+
+            let res = await client.get('Tasks', {
+              where,
+              join: ['project', 'tasktotals'],
+              order: ['daterequested|desc'],
+              page: 1,
+              pageSize
+            });
+
+            let pagesFetched = 1;
+            let scanned = 0;
+            let truncated = false;
+
+            while (true) {
+              const tasks = getTasksArray(res.data);
+              scanned += tasks.length;
+
+              for (const t of tasks) {
+                if (!isRecord(t)) continue;
+                const proj = t.project;
+                const joinedProjectId =
+                  isRecord(proj) && typeof proj.projectid === 'string' ? proj.projectid : undefined;
+                if (joinedProjectId !== projectId) continue;
+
+                quoteTaskForProject = t;
+                break;
+              }
+
+              if (quoteTaskForProject) break;
+              if (scanned >= maxTasksScanned) {
+                truncated = true;
+                break;
+              }
+              if (tasks.length < pageSize) break;
+
+              const nextPage = pagesFetched + 1;
+              const next = await client.get('Tasks', {
+                where,
+                join: ['project', 'tasktotals'],
+                order: ['daterequested|desc'],
+                page: nextPage,
+                pageSize
+              });
+              pagesFetched = nextPage;
+              res = next;
+              if (getTasksArray(res.data).length === 0) break;
+            }
+
+            debugInfo.projectQuoteTaskScan = { where, pagesFetched, scanned, truncated };
+
+            if (quoteTaskForProject) {
+              explanations.push(
+                'Resolved quote task for project via client task scan (status=Quote).'
+              );
+              const jn = parseJobNumber(quoteTaskForProject.jobnumber);
+              if (jn) {
+                resolvedJobNumber = jn;
+              } else {
+                warnings.push(
+                  'Found quote task for project, but its jobnumber was missing/non-numeric.'
+                );
+              }
+            } else {
+              warnings.push('No quote task (status=Quote) found for project in scanned window.');
+            }
+          } else {
+            warnings.push(
+              'Resolved project missing client orgid or projectid; cannot scan quote tasks.'
+            );
+          }
+        }
+
+        // 1g) If we have a jobnumber but no quote object yet, fetch quotes by jobnumber and choose a best candidate.
+        if (resolvedJobNumber && !resolvedQuote) {
+          const quotesRes = await client.get('Quotes', {
+            where: normalizeWhereParam([`and|jobnumber|=|${resolvedJobNumber}`]),
+            join: ['project'],
+            page: 1,
+            pageSize
+          });
+          const quotes = getQuotesArray(quotesRes.data).filter(isRecord);
+          if (quotes.length === 0) {
+            warnings.push('No quotes returned for resolved jobnumber.');
+          } else {
+            const quoteTaskRefcode =
+              quoteTaskForProject && typeof quoteTaskForProject.refcode === 'string'
+                ? normalizeComparableText(quoteTaskForProject.refcode)
+                : '';
+
+            const preferred =
+              quoteTaskRefcode.length > 0
+                ? quotes.find((q) => normalizeComparableText(q.refno) === quoteTaskRefcode)
+                : undefined;
+
+            resolvedQuote =
+              preferred ??
+              quotes
+                .slice()
+                .sort((a, b) =>
+                  String(b.createddatetime ?? '').localeCompare(String(a.createddatetime ?? ''))
+                )[0];
+
+            explanations.push('Resolved quote via Quotes(jobnumber) lookup.');
+          }
+        }
+
+        if (!resolvedProject) {
+          throw new Error(
+            'Could not resolve project context (projectId/projectRefno, or via quote/jobnumber task join).'
+          );
+        }
+        if (!resolvedQuote) {
+          throw new Error('Could not resolve quote context (quoteId/quoteRefno/jobnumber).');
+        }
+
+        // ---------------------------------------------------------------------
+        // 2) Fetch canonical project + quote details (to ensure client IDs, totals).
+        // ---------------------------------------------------------------------
+
+        const resolvedProjectId =
+          typeof resolvedProject.projectid === 'string' ? resolvedProject.projectid : undefined;
+        if (!resolvedProjectId) {
+          throw new Error('Resolved project missing projectid.');
+        }
+
+        const projectRes = await client.get('Projects', {
+          where: normalizeWhereParam([`and|projectid|=|${resolvedProjectId}`]),
+          page: 1,
+          pageSize: 1
+        });
+        const projectFull = getProjectsArray(projectRes.data)[0];
+        if (!isRecord(projectFull)) {
+          throw new Error('Failed to refetch resolved project by projectid.');
+        }
+
+        const clientOrg = isRecord(projectFull.client) ? projectFull.client : undefined;
+        const clientId =
+          clientOrg && typeof clientOrg.orgid === 'string'
+            ? (clientOrg.orgid as string)
+            : undefined;
+        if (!clientId) {
+          throw new Error('Resolved project missing client orgid; cannot fetch tasks.');
+        }
+
+        const resolvedQuoteId =
+          typeof resolvedQuote.quoteid === 'string' ? resolvedQuote.quoteid : undefined;
+        if (!resolvedQuoteId) {
+          throw new Error('Resolved quote missing quoteid.');
+        }
+
+        const quoteRes = await client.get('Quotes', {
+          where: normalizeWhereParam([`and|quoteid|=|${resolvedQuoteId}`]),
+          join: ['project'],
+          page: 1,
+          pageSize: 1
+        });
+        const quoteFull = getQuotesArray(quoteRes.data)[0];
+        if (!isRecord(quoteFull)) {
+          throw new Error('Failed to refetch resolved quote by quoteid.');
+        }
+
+        // ---------------------------------------------------------------------
+        // 3) Fetch actual hours: all tasks in the project (client-side filter by project).
+        // ---------------------------------------------------------------------
+
+        const taskWhereClauses: string[] = [
+          // NOTE: clientid is supported by the API even though it's missing from extracted docs.
+          `and|clientid|=|${clientId}`
+        ];
+        if (taskSinceDateRequested) {
+          taskWhereClauses.push(`and|daterequested|>|${taskSinceDateRequested}`);
+        }
+        const taskWhere = normalizeWhereParam(taskWhereClauses);
+
+        let taskRes = await client.get('Tasks', {
+          where: taskWhere,
+          join: ['project', 'tasktotals'],
+          order: ['daterequested|desc'],
+          page: 1,
+          pageSize
+        });
+
+        let taskPagesFetched = 1;
+        let taskScanned = 0;
+        let taskTruncated = false;
+
+        const projectTasks: Record<string, unknown>[] = [];
+
+        while (true) {
+          const tasks = getTasksArray(taskRes.data);
+          taskScanned += tasks.length;
+
+          for (const t of tasks) {
+            if (!isRecord(t)) continue;
+            const proj = t.project;
+            const joinedProjectId =
+              isRecord(proj) && typeof proj.projectid === 'string' ? proj.projectid : undefined;
+            const rawProjectId = typeof t.projectid === 'string' ? t.projectid : undefined;
+            const projectId = joinedProjectId ?? rawProjectId;
+            if (projectId !== resolvedProjectId) continue;
+
+            const totals = t.tasktotals;
+            const actualHours = isRecord(totals) ? toNumber(totals.totalhrs) : 0;
+            const actualLabourCost = isRecord(totals) ? toNumber(totals.totallab) : 0;
+
+            projectTasks.push({
+              taskid: t.taskid,
+              refcode: t.refcode,
+              taskname: t.taskname,
+              status: t.status,
+              daterequested: t.daterequested,
+              jobnumber: t.jobnumber,
+              actualHours,
+              actualLabourCost
+            });
+
+            if (projectTasks.length >= maxTasksScanned) {
+              taskTruncated = true;
+              break;
+            }
+          }
+
+          if (taskTruncated) break;
+          if (taskScanned >= maxTasksScanned) {
+            taskTruncated = true;
+            break;
+          }
+
+          if (tasks.length < pageSize) break;
+
+          const nextPage = taskPagesFetched + 1;
+          const next = await client.get('Tasks', {
+            where: taskWhere,
+            join: ['project', 'tasktotals'],
+            order: ['daterequested|desc'],
+            page: nextPage,
+            pageSize
+          });
+          taskPagesFetched = nextPage;
+          taskRes = next;
+          if (getTasksArray(taskRes.data).length === 0) break;
+        }
+
+        debugInfo.projectTaskScan = {
+          where: taskWhere,
+          pagesFetched: taskPagesFetched,
+          scanned: taskScanned,
+          truncated: taskTruncated,
+          matched: projectTasks.length
+        };
+
+        if (taskTruncated) {
+          warnings.push(
+            `Project task scan truncated at maxTasksScanned=${maxTasksScanned}; actual hours may be undercounted.`
+          );
+        }
+
+        const sortedTasks = projectTasks
+          .slice()
+          .sort((a, b) =>
+            String(a.daterequested ?? '').localeCompare(String(b.daterequested ?? ''))
+          );
+
+        const actualHoursTotal = sortedTasks.reduce(
+          (sum, t) => sum + toNumber((t as any).actualHours),
+          0
+        );
+
+        const actualHoursByStatus: Record<string, number> = {};
+        for (const t of sortedTasks) {
+          const status = String((t as any).status ?? 'Unknown');
+          actualHoursByStatus[status] =
+            (actualHoursByStatus[status] ?? 0) + toNumber((t as any).actualHours);
+        }
+
+        const actualLabourCostTotal = sortedTasks.reduce(
+          (sum, t) => sum + toNumber((t as any).actualLabourCost),
+          0
+        );
+
+        // ---------------------------------------------------------------------
+        // 4) Fetch planned hours: quote assemblies = parent QuoteLineItems only.
+        // ---------------------------------------------------------------------
+
+        const qliWhere = normalizeWhereParam([
+          `and|quoteid|=|${resolvedQuoteId}`,
+          // Parent-only items avoids double counting children.
+          `and|parentlineid|=|`
+        ]);
+
+        let qliRes = await client.get('QuoteLineItems', { where: qliWhere, page: 1, pageSize });
+        let qliPagesFetched = 1;
+        let qliTruncated = false;
+
+        let currentPage = 1;
+        while (true) {
+          const items = getQuoteLineItemsArray(qliRes.data);
+          if (items.length >= maxQuoteLineItems) {
+            qliTruncated = true;
+            break;
+          }
+          if (items.length < pageSize) break;
+
+          currentPage += 1;
+          const next = await client.get('QuoteLineItems', {
+            where: qliWhere,
+            page: currentPage,
+            pageSize
+          });
+          qliPagesFetched += 1;
+          const nextItems = getQuoteLineItemsArray(next.data);
+          if (nextItems.length === 0) break;
+          qliRes = { ...qliRes, data: mergeZoneResponseData(qliRes.data, next.data).merged };
+          if (nextItems.length < pageSize) break;
+        }
+
+        const qliAll = getQuoteLineItemsArray(qliRes.data);
+        if (qliAll.length > maxQuoteLineItems) {
+          qliRes = {
+            ...qliRes,
+            data: truncateZoneArrays(qliRes.data, maxQuoteLineItems).truncated
+          };
+          qliTruncated = true;
+        }
+
+        debugInfo.quoteLineItems = {
+          where: qliWhere,
+          pagesFetched: qliPagesFetched,
+          totalParentItems: getQuoteLineItemsArray(qliRes.data).length,
+          truncated: qliTruncated
+        };
+
+        if (qliTruncated) {
+          warnings.push(
+            `Quote line item scan truncated at maxQuoteLineItems=${maxQuoteLineItems}; planned hours may be undercounted.`
+          );
+        }
+
+        const plannedItems = getQuoteLineItemsArray(qliRes.data)
+          .filter(isRecord)
+          .map((li) => {
+            const qty = toNumber(li.qty);
+            const labourUnitHours = toNumber(li.labourunitrate);
+            const rawHours = qty * labourUnitHours;
+            const amountEx = toNumber(li.totalex);
+            const sign = amountEx < 0 ? -1 : 1;
+
+            const title = firstLine(li.item);
+            const titleClean = cleanTextForMatch(title);
+
+            const plannedHours = sign * Math.abs(rawHours);
+            const plannedLabourCostEx = sign * Math.abs(toNumber(li.labourtotal));
+
+            return {
+              lineid: li.lineid,
+              takeoffname: li.takeoffname,
+              itemTitle: title,
+              itemTitleClean: titleClean,
+              totalex: amountEx,
+              qty,
+              labourunitrate: labourUnitHours,
+              plannedHours,
+              plannedLabourCostEx
+            };
+          })
+          .filter((li) => {
+            // Drop ignorable boilerplate items unless they carry hours.
+            if (Math.abs(li.plannedHours) > 0) return true;
+            return !isIgnorableQuoteItemTitle(li.itemTitle);
+          });
+
+        const plannedHoursTotal = plannedItems.reduce((sum, li) => sum + li.plannedHours, 0);
+        const plannedLabourCostTotal = plannedItems.reduce(
+          (sum, li) => sum + li.plannedLabourCostEx,
+          0
+        );
+
+        const cevItems = plannedItems.filter((li) => isCevTakeoffName(li.takeoffname));
+        const cevHoursNet = cevItems.reduce((sum, li) => sum + li.plannedHours, 0);
+        const cevHoursPositive = cevItems.reduce(
+          (sum, li) => sum + Math.max(0, li.plannedHours),
+          0
+        );
+        const cevHoursNegative = cevItems.reduce(
+          (sum, li) => sum + Math.min(0, li.plannedHours),
+          0
+        );
+        const baseHours = plannedHoursTotal - cevHoursNet;
+
+        const quoteHeaderAllowedHours = toNumber(quoteFull.totalhours);
+        const quoteHeaderLabourCostEx = toNumber(quoteFull.labourcostex);
+        const quoteLabourRateExPerHour =
+          quoteHeaderAllowedHours > 0 ? quoteHeaderLabourCostEx / quoteHeaderAllowedHours : 0;
+
+        if (quoteHeaderAllowedHours > 0) {
+          const diff = Math.abs(plannedHoursTotal - quoteHeaderAllowedHours);
+          if (diff / quoteHeaderAllowedHours > 0.02) {
+            warnings.push(
+              `Planned hours from parent QuoteLineItems (${plannedHoursTotal.toFixed(2)}) differs from quote.totalhours (${quoteHeaderAllowedHours.toFixed(
+                2
+              )}).`
+            );
+          }
+        }
+
+        // ---------------------------------------------------------------------
+        // 5) Match tasks to planned quote assemblies.
+        // ---------------------------------------------------------------------
+
+        const taskCandidates = sortedTasks.map((t) => {
+          const nameClean = cleanTextForMatch((t as any).taskname);
+          return {
+            ...t,
+            tasknameClean: nameClean
+          };
+        });
+
+        const itemCandidates = plannedItems
+          .map((li, plannedIndex) => ({
+            ...li,
+            plannedIndex,
+            takeoffnameClean: cleanTextForMatch(li.takeoffname)
+          }))
+          .filter((li) => li.itemTitleClean.length > 0);
+
+        type Match = { taskIndex: number; itemIndex: number; score: number };
+        const matches: Match[] = [];
+        for (let ti = 0; ti < taskCandidates.length; ti += 1) {
+          const t = taskCandidates[ti] as any;
+          const a = String(t.tasknameClean ?? '');
+          if (!a) continue;
+
+          for (let ii = 0; ii < itemCandidates.length; ii += 1) {
+            const li = itemCandidates[ii] as any;
+            const b = String(li.itemTitleClean ?? '');
+            if (!b) continue;
+
+            const score = scoreTextMatch(a, b);
+            if (score >= matchThreshold) {
+              matches.push({ taskIndex: ti, itemIndex: ii, score });
+            }
+          }
+        }
+
+        matches.sort((a, b) => b.score - a.score);
+
+        const usedTasks = new Set<number>();
+        const usedItems = new Set<number>();
+        const usedPlannedIndices = new Set<number>();
+        const assigned: Record<number, Match> = {};
+
+        for (const m of matches) {
+          if (usedTasks.has(m.taskIndex)) continue;
+          if (usedItems.has(m.itemIndex)) continue;
+          usedTasks.add(m.taskIndex);
+          usedItems.add(m.itemIndex);
+          usedPlannedIndices.add((itemCandidates[m.itemIndex] as any).plannedIndex as number);
+          assigned[m.taskIndex] = m;
+        }
+
+        const taskBreakdown = taskCandidates.map((t, idx) => {
+          const m = assigned[idx];
+          const li = typeof m !== 'undefined' ? itemCandidates[m.itemIndex] : undefined;
+          const plannedHours = li ? (li as any).plannedHours : 0;
+          const actualHours = toNumber((t as any).actualHours);
+          const matchScore = m ? m.score : 0;
+          return {
+            taskid: (t as any).taskid,
+            refcode: (t as any).refcode,
+            taskname: (t as any).taskname,
+            status: (t as any).status,
+            daterequested: (t as any).daterequested,
+            jobnumber: (t as any).jobnumber,
+            actualHours,
+            plannedHours,
+            varianceHours: actualHours - plannedHours,
+            ...(li
+              ? {
+                  matchedQuoteLineId: (li as any).lineid,
+                  matchedQuoteItemTitle: (li as any).itemTitle,
+                  matchedQuoteTakeoff: (li as any).takeoffname,
+                  matchScore
+                }
+              : {
+                  matchedQuoteLineId: undefined,
+                  matchedQuoteItemTitle: undefined,
+                  matchedQuoteTakeoff: undefined,
+                  matchScore: 0
+                })
+          };
+        });
+
+        const matchedTaskCount = taskBreakdown.filter((t) =>
+          Boolean((t as any).matchedQuoteLineId)
+        ).length;
+        const unmatchedTaskCount = taskBreakdown.length - matchedTaskCount;
+
+        const matchedPlannedHours = taskBreakdown.reduce(
+          (sum, t) => sum + toNumber((t as any).plannedHours),
+          0
+        );
+
+        const unmatchedItems = plannedItems.filter((_, idx) => !usedPlannedIndices.has(idx));
+
+        const overrunHoursVsQuoteHeader = actualHoursTotal - quoteHeaderAllowedHours;
+        const overrunCostExAtQuoteRate = overrunHoursVsQuoteHeader * quoteLabourRateExPerHour;
+
+        const out: Record<string, unknown> = {
+          summary: {
+            project: {
+              projectid: projectFull.projectid,
+              projectnumber: projectFull.projectnumber,
+              projectname: projectFull.projectname,
+              refno: projectFull.refno,
+              status: projectFull.status,
+              client: clientOrg ? { orgid: clientOrg.orgid, orgname: clientOrg.orgname } : undefined
+            },
+            quote: {
+              quoteid: quoteFull.quoteid,
+              refno: quoteFull.refno,
+              quotename: quoteFull.quotename,
+              status: quoteFull.status,
+              jobnumber: quoteFull.jobnumber,
+              createddate: quoteFull.createddate,
+              createddatetime: quoteFull.createddatetime,
+              totalex: quoteFull.totalex,
+              totalinc: quoteFull.totalinc,
+              totalhours: quoteFull.totalhours,
+              labourcostex: quoteFull.labourcostex
+            },
+            actual: {
+              totalHours: actualHoursTotal,
+              hoursByStatus: actualHoursByStatus,
+              // NOTE: tasktotals.totallab is whatever AroFlo reports as task labour totals; basis may differ from quote sell rate.
+              taskTotalsLabour: actualLabourCostTotal
+            },
+            allowed: {
+              quoteHeaderHours: quoteHeaderAllowedHours,
+              quoteHeaderLabourCostEx: quoteHeaderLabourCostEx,
+              quoteLabourRateExPerHour: quoteLabourRateExPerHour,
+              plannedHoursFromAssemblies: plannedHoursTotal,
+              plannedLabourCostFromAssembliesEx: plannedLabourCostTotal,
+              creditsExtrasVariations: {
+                present: cevItems.length > 0,
+                netHours: cevHoursNet,
+                positiveHours: cevHoursPositive,
+                negativeHours: cevHoursNegative,
+                baseHours: baseHours
+              }
+            },
+            variance: {
+              overrunHoursVsQuoteHeader: overrunHoursVsQuoteHeader,
+              overrunLabourCostExAtQuoteRate: overrunCostExAtQuoteRate
+            },
+            mapping: {
+              taskCount: taskBreakdown.length,
+              matchedTaskCount,
+              unmatchedTaskCount,
+              matchedPlannedHours,
+              quoteAssemblyCount: plannedItems.length,
+              unmatchedQuoteAssemblyCount: unmatchedItems.length
+            }
+          },
+          tasks: taskBreakdown,
+          linkages: { explanations, warnings }
+        };
+
+        if (includeUnmatchedQuoteItems) {
+          out.unmatchedQuoteItems = unmatchedItems.slice(0, maxUnmatchedQuoteItems).map((li) => ({
+            lineid: li.lineid,
+            takeoffname: li.takeoffname,
+            itemTitle: li.itemTitle,
+            plannedHours: li.plannedHours,
+            plannedLabourCostEx: li.plannedLabourCostEx,
+            totalex: li.totalex
+          }));
+          out.unmatchedQuoteItemsSummary = {
+            total: unmatchedItems.length,
+            returned: Math.min(unmatchedItems.length, maxUnmatchedQuoteItems)
+          };
+        }
+
+        if (mode === 'verbose' || mode === 'debug' || mode === 'raw') {
+          out.meta = {
+            quoteSinceCreatedDate,
+            taskSinceDateRequested,
+            projectSinceCreatedUtc
+          };
+        }
+
+        if (mode === 'debug' || mode === 'raw') {
+          out.debug = args.debug ? debugInfo : undefined;
+        }
+
+        if (mode === 'raw') {
+          out.raw = {
+            resolvedProject,
+            resolvedQuote
+          };
+        }
+
+        return successToolResult(out);
+      } catch (error) {
+        return errorToolResult(error, {
+          mode,
+          debug: { tool: 'aroflo_report_project_labour_budget_audit' }
         });
       }
     }

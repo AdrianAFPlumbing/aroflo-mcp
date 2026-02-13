@@ -14,6 +14,13 @@ Install the server on your machine (puts `aroflo-mcp` on your PATH via `npm link
 make install
 ```
 
+If global npm linking is restricted on your machine, skip `npm link` and run without a global install:
+
+```bash
+npm run build
+node dist/mcp/server.js
+```
+
 ### Install Into Codex (stdio)
 
 1. Create a local `.env` (not committed) with your credentials:
@@ -28,6 +35,8 @@ cp .env.example .env
 ```bash
 make codex-install
 ```
+
+`make codex-install` writes MCP config into `~/.codex/config.toml`. If this path is permission-restricted, re-run with appropriate permissions.
 
 3. Verify:
 
@@ -62,7 +71,7 @@ Notes:
 Install dependencies:
 
 ```bash
-npm install
+npm ci
 ```
 
 Build and test:
@@ -76,6 +85,13 @@ Run server (stdio):
 
 ```bash
 npm run dev
+```
+
+If your environment blocks IPC sockets used by `tsx` in dev mode, use the built runtime instead:
+
+```bash
+npm run build
+npm run start
 ```
 
 Run server (HTTP Streamable transport):

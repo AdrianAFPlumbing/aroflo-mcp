@@ -34,15 +34,29 @@ codex-install: install ## Install + register the server in Codex (stdio). Loads 
 			-- "$${NODE_BIN}" "$${SERVER_ENTRY}" >/dev/null; \
 		codex mcp get aroflo
 
-deps: ## Install dependencies (uses package-lock.json)
-	@npm install
+deps: ## Install dependencies (prefers package-lock.json for reproducible installs)
+	@set -euo pipefail; \
+		if [ -f package-lock.json ]; then \
+			npm ci; \
+		else \
+			echo "package-lock.json not found; falling back to npm install"; \
+			npm install; \
+		fi
 
 build: ## Compile TypeScript to dist/
 	@npm run build
 
 link: ## Link package globally so `aroflo-mcp` is on PATH
-	@npm link
-	@echo "Installed: $$(command -v aroflo-mcp)"
+	@set -euo pipefail; \
+		if npm link; then \
+			echo "Installed: $$(command -v aroflo-mcp)"; \
+		else \
+			echo "Warning: npm link failed (likely due to global npm permissions)." >&2; \
+			echo "You can either:" >&2; \
+			echo "  1) Configure a user npm prefix: npm config set prefix ~/.npm-global" >&2; \
+			echo "     Then add ~/.npm-global/bin to PATH and re-run make install." >&2; \
+			echo "  2) Skip global install and run directly: npm run build && node dist/mcp/server.js" >&2; \
+		fi
 
 test: ## Run tests
 	@npm test

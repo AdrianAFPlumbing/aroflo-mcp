@@ -63,6 +63,18 @@ Resolve a job context (jobnumber + task(s) + quote(s) + project):
 }
 ```
 
+Audit a project against a quote (actual vs allowed labour hours) and include a planned-vs-actual breakdown by task:
+
+- Tool: `aroflo_report_project_labour_budget_audit`
+
+```json
+{
+  "quoteRefno": "Luic21",
+  "includeUnmatchedQuoteItems": false,
+  "mode": "data"
+}
+```
+
 List open projects (client-side filtering on `status=="open"` + `closeddate==""`):
 
 - Tool: `aroflo_list_open_projects`
