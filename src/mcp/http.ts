@@ -6,6 +6,7 @@ import type { AroFloClient } from '../aroflo/client.js';
 import { logger } from '../utils/logger.js';
 import { createAroFloMcpServer } from './app.js';
 import { handleTasksRest } from './rest.js';
+import { handleAiComplete } from './ai.js';
 
 export interface HttpServerOptions {
   host: string;
@@ -73,6 +74,27 @@ export async function handleMcpHttpRequest(
       await handleTasksRest(req, res, client);
     } catch (error) {
       logger.error({ err: error }, 'Failed to handle /tasks REST request');
+      writeJson(res, 500, {
+        status: 'error',
+        message: error instanceof Error ? error.message : 'Internal server error'
+      });
+    }
+    return;
+  }
+  // --------------------------------------------------------------------------
+
+  // --- Quote Portal AI proxy ------------------------------------------------
+  // Signs a prompt through Anthropic server-side so the portal never holds a key.
+  if (pathname === '/ai/complete' || pathname === '/ai/complete/') {
+    if (req.method !== 'POST') {
+      writeJson(res, 405, { status: 'error', message: 'Method not allowed' });
+      return;
+    }
+
+    try {
+      await handleAiComplete(req, res);
+    } catch (error) {
+      logger.error({ err: error }, 'Failed to handle /ai/complete request');
       writeJson(res, 500, {
         status: 'error',
         message: error instanceof Error ? error.message : 'Internal server error'
