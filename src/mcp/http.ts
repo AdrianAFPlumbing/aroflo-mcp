@@ -5,6 +5,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import type { AroFloClient } from '../aroflo/client.js';
 import { logger } from '../utils/logger.js';
 import { createAroFloMcpServer } from './app.js';
+import { handleTasksRest } from './rest.js';
 
 export interface HttpServerOptions {
   host: string;
@@ -57,7 +58,31 @@ export async function handleMcpHttpRequest(
     return;
   }
 
-  if (getPathname(req) !== mcpPath) {
+  const pathname = getPathname(req);
+
+  // --- Quote Portal REST endpoint -------------------------------------------
+  // Plain REST route the browser portal can call directly (the /mcp route only
+  // speaks MCP JSON-RPC and can't be consumed from a fetch()).
+  if (pathname === '/tasks' || pathname === '/tasks/') {
+    if (req.method !== 'GET') {
+      writeJson(res, 405, { status: 'error', message: 'Method not allowed' });
+      return;
+    }
+
+    try {
+      await handleTasksRest(req, res, client);
+    } catch (error) {
+      logger.error({ err: error }, 'Failed to handle /tasks REST request');
+      writeJson(res, 500, {
+        status: 'error',
+        message: error instanceof Error ? error.message : 'Internal server error'
+      });
+    }
+    return;
+  }
+  // --------------------------------------------------------------------------
+
+  if (pathname !== mcpPath) {
     writeJson(res, 404, {
       jsonrpc: '2.0',
       error: {
@@ -157,3 +182,4 @@ export async function stopHttpServer(server: Server): Promise<void> {
     });
   });
 }
+
