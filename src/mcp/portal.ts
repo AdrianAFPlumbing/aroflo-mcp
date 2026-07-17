@@ -40,8 +40,19 @@ interface SessionUser {
   active: boolean;
 }
 
+function tokenFromReq(req: IncomingMessage): string {
+  const hdr = (req.headers['x-portal-token'] as string) || '';
+  if (hdr) return hdr;
+  try {
+    const u = new URL(req.url || '', 'http://x');
+    return u.searchParams.get('token') || '';
+  } catch {
+    return '';
+  }
+}
+
 async function getUser(req: IncomingMessage): Promise<SessionUser | null> {
-  const token = (req.headers['x-portal-token'] as string) || '';
+  const token = tokenFromReq(req);
   if (!token) return null;
   const rows = await query<SessionUser>(
     `SELECT u.id, u.name, u.email, u.is_admin, u.active
@@ -111,7 +122,7 @@ export async function handlePortal(
     }
 
     if (parts[0] === 'logout' && method === 'POST') {
-      const token = (req.headers['x-portal-token'] as string) || '';
+      const token = tokenFromReq(req);
       await query('DELETE FROM sessions WHERE token = $1', [token]);
       return (send(res, 200, { status: 'ok' }), true);
     }
