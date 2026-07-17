@@ -23,8 +23,15 @@ function send(res: ServerResponse, code: number, payload: unknown): void {
 }
 
 /**
- * POST /ai/complete  { "prompt": "..." }  ->  { "status":"ok", "text":"..." }
- * Used by the Quote Portal's AI quote-assist to draft scope / exclusions.
+ * POST /ai/complete
+ *   { "prompt": "..." }                      // simple: one user message
+ *   { "system": "...", "prompt": "..." }     // preferred: static rules cached in system
+ *   { "system": "...", "messages": [...] }   // full control over the messages array
+ * -> { "status":"ok", "text":"..." }
+ *
+ * The `system` text is sent as a cache_control:ephemeral block so repeat drafts
+ * reuse the cached pricing/formatting rules at ~10% cost. Used by the Quote
+ * Portal's AI quote-assist to draft scope / exclusions.
  */
 export async function handleAiComplete(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -33,21 +40,38 @@ export async function handleAiComplete(req: IncomingMessage, res: ServerResponse
     return;
   }
 
-  let body: { prompt?: string } = {};
+  let body: { prompt?: string; system?: string; messages?: unknown } = {};
   try {
     body = JSON.parse((await readBody(req)) || '{}');
   } catch {
     body = {};
   }
 
+  // Per-quote content goes in messages; static pricing/formatting rules go in `system`.
   const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
-  if (!prompt) {
-    send(res, 400, { status: 'error', message: 'prompt is required' });
+  const systemText = typeof body.system === 'string' ? body.system.trim() : '';
+  const messages = Array.isArray(body.messages)
+    ? body.messages
+    : prompt
+      ? [{ role: 'user', content: prompt }]
+      : [];
+
+  if (!messages.length) {
+    send(res, 400, { status: 'error', message: 'prompt (or messages) is required' });
     return;
   }
 
-  const model = process.env.AI_MODEL || 'claude-3-5-sonnet-20241022';
+  const model = process.env.AI_MODEL || 'claude-sonnet-4-6';
   const maxTokens = Number(process.env.AI_MAX_TOKENS || 1024);
+
+  // Send the static context as a cached system block so it's billed at ~10% on
+  // repeat drafts (prompt caching). Only the per-quote details are re-sent full price.
+  const payload: Record<string, unknown> = { model, max_tokens: maxTokens, messages };
+  if (systemText) {
+    payload.system = [
+      { type: 'text', text: systemText, cache_control: { type: 'ephemeral' } }
+    ];
+  }
 
   try {
     const response = await fetch(ANTHROPIC_URL, {
@@ -57,11 +81,7 @@ export async function handleAiComplete(req: IncomingMessage, res: ServerResponse
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01'
       },
-      body: JSON.stringify({
-        model,
-        max_tokens: maxTokens,
-        messages: [{ role: 'user', content: prompt }]
-      })
+      body: JSON.stringify(payload)
     });
 
     const data: any = await response.json();
@@ -81,4 +101,3 @@ export async function handleAiComplete(req: IncomingMessage, res: ServerResponse
     send(res, 502, { status: 'error', message: error?.message || 'AI request failed' });
   }
 }
-
