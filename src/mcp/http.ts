@@ -7,6 +7,8 @@ import { logger } from '../utils/logger.js';
 import { createAroFloMcpServer } from './app.js';
 import { handleTasksRest } from './rest.js';
 import { handleAiComplete } from './ai.js';
+import { handlePortal } from './portal.js';
+import { handleStatic } from './static.js';
 
 export interface HttpServerOptions {
   host: string;
@@ -60,6 +62,12 @@ export async function handleMcpHttpRequest(
   }
 
   const pathname = getPathname(req);
+
+  // --- Quote Portal front-end (permanent bookmarkable URL) ------------------
+  if (await handleStatic(req, res, pathname)) return;
+
+  // --- Quote Portal DB API (auth, users, quotes, versions, prices, clients) -
+  if (await handlePortal(req, res, pathname)) return;
 
   // --- Quote Portal REST endpoint -------------------------------------------
   // Plain REST route the browser portal can call directly (the /mcp route only
@@ -204,4 +212,3 @@ export async function stopHttpServer(server: Server): Promise<void> {
     });
   });
 }
-
