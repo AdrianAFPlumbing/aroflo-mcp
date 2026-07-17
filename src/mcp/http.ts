@@ -22,7 +22,7 @@ const ALLOWED_METHODS = new Set(['POST', 'GET', 'DELETE']);
 function setCorsHeaders(res: ServerResponse): void {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, GET, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'content-type, mcp-session-id');
+  res.setHeader('Access-Control-Allow-Headers', 'content-type, mcp-session-id, x-portal-token');
 }
 
 function writeJson(res: ServerResponse, statusCode: number, payload: unknown): void {
@@ -67,7 +67,7 @@ export async function handleMcpHttpRequest(
   if (await handleStatic(req, res, pathname)) return;
 
   // --- Quote Portal DB API (auth, users, quotes, versions, prices, clients) -
-  if (await handlePortal(req, res, pathname)) return;
+  if (await handlePortal(req, res, pathname, client)) return;
 
   // --- Quote Portal REST endpoint -------------------------------------------
   // Plain REST route the browser portal can call directly (the /mcp route only
