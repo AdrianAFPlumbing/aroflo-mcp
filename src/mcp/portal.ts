@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 
 import { logger } from '../utils/logger.js';
 import { dbConfigured, query, hashPin, verifyPin } from '../db/db.js';
+import type { AroFloClient } from '../aroflo/client.js';
+import { fetchJobPhotos } from './rest.js';
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -75,7 +77,8 @@ function seg(pathname: string): string[] {
 export async function handlePortal(
   req: IncomingMessage,
   res: ServerResponse,
-  pathname: string
+  pathname: string,
+  aroflo: AroFloClient
 ): Promise<boolean> {
   if (!pathname.startsWith('/portal')) return false;
 
@@ -333,6 +336,20 @@ export async function handlePortal(
       );
       const syncedAt = rows[0]?.synced_at || null;
       return (send(res, 200, { status: 'ok', count: rows.length, syncedAt, tasks: rows.map((r) => r.data) }), true);
+    }
+
+    // --- Live job photos (signed URLs, fetched on demand — never cached) --
+    if (parts[0] === 'job-photos' && method === 'GET') {
+      const u = new URL(req.url || '', 'http://x');
+      const jobNo = u.searchParams.get('jobNo') || '';
+      if (!jobNo) return (send(res, 400, { status: 'error', message: 'jobNo required' }), true);
+      try {
+        const photos = await fetchJobPhotos(aroflo, jobNo);
+        return (send(res, 200, { status: 'ok', jobNo, count: photos.length, photos }), true);
+      } catch (err) {
+        logger.error({ err, jobNo }, 'job-photos fetch failed');
+        return (send(res, 502, { status: 'error', message: err instanceof Error ? err.message : 'AroFlo error' }), true);
+      }
     }
 
     send(res, 404, { status: 'error', message: 'Unknown portal route' });
