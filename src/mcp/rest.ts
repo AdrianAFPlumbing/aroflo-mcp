@@ -50,19 +50,19 @@ function mapTask(task: Record<string, unknown>) {
   };
 }
 
+export type MappedTask = ReturnType<typeof mapTask>;
+
 /**
- * GET /tasks — returns active AroFlo tasks whose sub-status is "Quote Required".
+ * Fetch active AroFlo tasks whose sub-status is "Quote Required".
  *
  * Why filter in code: AroFlo's Tasks zone does NOT allow WHERE on `substatus`
  * (only status/jobnumber/clientname/dates). We therefore pull active tasks via a
  * valid `status IN (...)` filter (which also overrides the default 30-day filter),
  * then filter on the returned substatus field ourselves.
+ *
+ * Shared by the on-demand GET /tasks route and the scheduled DB sync.
  */
-export async function handleTasksRest(
-  _req: IncomingMessage,
-  res: ServerResponse,
-  client: AroFloClient
-): Promise<void> {
+export async function fetchQuoteRequiredTasks(client: AroFloClient): Promise<MappedTask[]> {
   const collected: Record<string, unknown>[] = [];
   let page = 1;
 
@@ -91,12 +91,24 @@ export async function handleTasksRest(
     page += 1;
   }
 
-  const tasks = collected
+  return collected
     .filter((task) => getSubstatusName(task).toLowerCase() === TARGET_SUBSTATUS)
     .map(mapTask);
+}
+
+/**
+ * GET /tasks — live on-demand fetch. If a Postgres cache is available, the
+ * portal can also read the last synced snapshot via /portal/tasks (see portal.ts),
+ * but this route always hits AroFlo directly so a manual refresh is possible.
+ */
+export async function handleTasksRest(
+  _req: IncomingMessage,
+  res: ServerResponse,
+  client: AroFloClient
+): Promise<void> {
+  const tasks = await fetchQuoteRequiredTasks(client);
 
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ status: 'ok', count: tasks.length, tasks }));
 }
-
