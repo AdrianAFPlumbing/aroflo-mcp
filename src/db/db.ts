@@ -78,11 +78,16 @@ export async function initSchema(): Promise<void> {
       id          uuid PRIMARY KEY,
       name        text NOT NULL,
       email       text UNIQUE,
+      title       text,
+      phone       text,
       pin_hash    text NOT NULL,
       is_admin    boolean NOT NULL DEFAULT false,
       active      boolean NOT NULL DEFAULT true,
       created_at  timestamptz NOT NULL DEFAULT now()
     );
+    -- Migration for existing databases (columns added after first deploy):
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS title text;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS phone text;
 
     CREATE TABLE IF NOT EXISTS sessions (
       token       text PRIMARY KEY,
@@ -144,14 +149,14 @@ async function seedUsers(): Promise<void> {
 
   const adminPin = process.env.PORTAL_ADMIN_PIN || '2468';
   await query(
-    `INSERT INTO users (id, name, email, pin_hash, is_admin, active)
-     VALUES ($1,$2,$3,$4,true,true)`,
-    [randomUUID(), 'Adrian', 'adrian@afplumbing.com.au', hashPin(adminPin)]
+    `INSERT INTO users (id, name, email, title, phone, pin_hash, is_admin, active)
+     VALUES ($1,$2,$3,$4,$5,$6,true,true)`,
+    [randomUUID(), 'Adrian Menon', 'adrian@afplumbing.com.au', 'Senior Operations Manager', '0415 104 144', hashPin(adminPin)]
   );
   await query(
-    `INSERT INTO users (id, name, email, pin_hash, is_admin, active)
-     VALUES ($1,$2,$3,$4,false,true)`,
-    [randomUUID(), 'Michael Canty', 'michael@afplumbing.com.au', hashPin('1234')]
+    `INSERT INTO users (id, name, email, title, phone, pin_hash, is_admin, active)
+     VALUES ($1,$2,$3,$4,$5,$6,false,true)`,
+    [randomUUID(), 'Michael Canty', 'michael@afplumbing.com.au', 'Operations Supervisor - NSW', '0415 494 515', hashPin('1234')]
   );
   logger.info('Seeded initial users (Adrian=admin, Michael Canty=user)');
 }
