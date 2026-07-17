@@ -142,10 +142,10 @@ export class AroFloClient {
       headers['Content-Type'] = 'application/x-www-form-urlencoded';
     }
 
-    const url = new URL(this.baseUrl);
-    if (plan.method === 'GET' && plan.varString.length > 0) {
-      url.search = plan.varString;
-    }
+    const url =
+      plan.method === 'GET' && plan.varString.length > 0
+        ? `${this.baseUrl}${this.baseUrl.includes('?') ? '&' : '?'}${plan.varString}`
+        : this.baseUrl;
 
     const response = await fetch(url, {
       method: plan.method,
