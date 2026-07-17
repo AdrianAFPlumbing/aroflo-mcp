@@ -17,7 +17,7 @@ export interface PostVarStringInput {
 }
 
 function encodeValue(value: QueryValue | string): string {
-  return encodeURIComponent(String(value));
+  return encodeURIComponent(String(value)).replace(/'/g, '%27');
 }
 
 function appendParam(parts: string[], key: string, value: QueryValue | string): void {
