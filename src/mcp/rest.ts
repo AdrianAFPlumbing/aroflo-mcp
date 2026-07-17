@@ -52,6 +52,77 @@ function mapTask(task: Record<string, unknown>) {
 
 export type MappedTask = ReturnType<typeof mapTask>;
 
+// ---------------------------------------------------------------------------
+// On-demand photo fetch. AroFlo's file URLs are signed and expire in ~10 min,
+// so these are fetched live when a user opens a job — NEVER stored in the cache.
+// ---------------------------------------------------------------------------
+const IMAGE_EXT = /\.(jpe?g|png|gif|webp|heic|heif|bmp|tiff?)$/i;
+
+function pickUrl(rec: Record<string, unknown>): string {
+  for (const k of ['url', 'downloadurl', 'downloadURL', 'link', 'href', 'filelink', 'fileurl']) {
+    const v = rec[k];
+    if (typeof v === 'string' && /^https?:\/\//i.test(v)) return v;
+  }
+  return '';
+}
+function pickName(rec: Record<string, unknown>): string {
+  for (const k of ['filename', 'name', 'title', 'description', 'documentname']) {
+    const v = rec[k];
+    if (typeof v === 'string' && v.trim()) return v.trim();
+  }
+  return '';
+}
+
+// Recursively collect document/photo records from an arbitrary join payload.
+function collectFiles(node: unknown, out: Record<string, unknown>[]): void {
+  if (Array.isArray(node)) {
+    for (const n of node) collectFiles(n, out);
+    return;
+  }
+  if (!isRecord(node)) return;
+  if (pickUrl(node) || pickName(node)) out.push(node);
+  for (const v of Object.values(node)) {
+    if (Array.isArray(v) || isRecord(v)) collectFiles(v, out);
+  }
+}
+
+export interface JobPhoto {
+  name: string;
+  url: string;
+  isImage: boolean;
+}
+
+/** Fetch documents & photos for a single job (live, signed URLs). */
+export async function fetchJobPhotos(client: AroFloClient, jobNo: string): Promise<JobPhoto[]> {
+  const response = await client.get('Tasks', {
+    where: [`and|jobnumber|=|${jobNo}`],
+    join: ['documentsandphotos'],
+    pageSize: 5
+  });
+  const { items } = extractZoneItems('Tasks', response.data);
+  const task = items.find((t) => isRecord(t)) as Record<string, unknown> | undefined;
+  if (!task) return [];
+
+  const found: Record<string, unknown>[] = [];
+  collectFiles(task['documentsandphotos'], found);
+
+  const seen = new Set<string>();
+  const photos: JobPhoto[] = [];
+  for (const rec of found) {
+    const url = pickUrl(rec);
+    const name = pickName(rec) || 'file';
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    // Skip AroFlo's synthetic email-import attachment records.
+    if (/task email import attachment/i.test(name)) continue;
+    if (/\.html?$/i.test(name)) continue;
+    photos.push({ name, url, isImage: IMAGE_EXT.test(name) });
+  }
+  // Images first
+  photos.sort((a, b) => Number(b.isImage) - Number(a.isImage));
+  return photos;
+}
+
 /**
  * Fetch active AroFlo tasks whose sub-status is "Quote Required".
  *
