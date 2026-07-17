@@ -38,6 +38,8 @@ interface SessionUser {
   id: string;
   name: string;
   email: string | null;
+  title: string | null;
+  phone: string | null;
   is_admin: boolean;
   active: boolean;
 }
@@ -57,7 +59,7 @@ async function getUser(req: IncomingMessage): Promise<SessionUser | null> {
   const token = tokenFromReq(req);
   if (!token) return null;
   const rows = await query<SessionUser>(
-    `SELECT u.id, u.name, u.email, u.is_admin, u.active
+    `SELECT u.id, u.name, u.email, u.title, u.phone, u.is_admin, u.active
        FROM sessions s JOIN users u ON u.id = s.user_id
       WHERE s.token = $1`,
     [token]
@@ -99,7 +101,7 @@ export async function handlePortal(
       if (!ident || !pin) return (send(res, 400, { status: 'error', message: 'Name/email and PIN required' }), true);
 
       const users = await query<SessionUser & { pin_hash: string }>(
-        `SELECT id, name, email, is_admin, active, pin_hash FROM users
+        `SELECT id, name, email, title, phone, is_admin, active, pin_hash FROM users
           WHERE lower(name) = $1 OR lower(email) = $1 LIMIT 1`,
         [ident]
       );
@@ -112,7 +114,7 @@ export async function handlePortal(
       return (send(res, 200, {
         status: 'ok',
         token,
-        user: { id: u.id, name: u.name, email: u.email, isAdmin: u.is_admin }
+        user: { id: u.id, name: u.name, email: u.email, title: u.title, phone: u.phone, isAdmin: u.is_admin }
       }), true);
     }
 
@@ -121,7 +123,7 @@ export async function handlePortal(
     if (!user) return (send(res, 401, { status: 'error', message: 'Not authenticated' }), true);
 
     if (parts[0] === 'me' && method === 'GET') {
-      return (send(res, 200, { status: 'ok', user: { id: user.id, name: user.name, email: user.email, isAdmin: user.is_admin } }), true);
+      return (send(res, 200, { status: 'ok', user: { id: user.id, name: user.name, email: user.email, title: user.title, phone: user.phone, isAdmin: user.is_admin } }), true);
     }
 
     if (parts[0] === 'logout' && method === 'POST') {
@@ -136,7 +138,7 @@ export async function handlePortal(
 
       if (method === 'GET' && parts.length === 1) {
         const rows = await query(
-          'SELECT id, name, email, is_admin, active, created_at FROM users ORDER BY created_at'
+          'SELECT id, name, email, title, phone, is_admin, active, created_at FROM users ORDER BY created_at'
         );
         return (send(res, 200, { status: 'ok', users: rows }), true);
       }
@@ -147,9 +149,9 @@ export async function handlePortal(
         if (!name || pin.length < 4) return (send(res, 400, { status: 'error', message: 'Name and 4+ digit PIN required' }), true);
         const id = randomUUID();
         await query(
-          `INSERT INTO users (id, name, email, pin_hash, is_admin, active)
-           VALUES ($1,$2,$3,$4,$5,true)`,
-          [id, name, (b.email || '').trim() || null, hashPin(pin), Boolean(b.isAdmin)]
+          `INSERT INTO users (id, name, email, title, phone, pin_hash, is_admin, active)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,true)`,
+          [id, name, (b.email || '').trim() || null, (b.title || '').trim() || null, (b.phone || '').trim() || null, hashPin(pin), Boolean(b.isAdmin)]
         );
         return (send(res, 200, { status: 'ok', id }), true);
       }
@@ -161,6 +163,8 @@ export async function handlePortal(
         let i = 1;
         if (typeof b.name === 'string') { sets.push(`name = $${i++}`); vals.push(b.name.trim()); }
         if (typeof b.email === 'string') { sets.push(`email = $${i++}`); vals.push(b.email.trim() || null); }
+        if (typeof b.title === 'string') { sets.push(`title = $${i++}`); vals.push(b.title.trim() || null); }
+        if (typeof b.phone === 'string') { sets.push(`phone = $${i++}`); vals.push(b.phone.trim() || null); }
         if (typeof b.isAdmin === 'boolean') { sets.push(`is_admin = $${i++}`); vals.push(b.isAdmin); }
         if (typeof b.active === 'boolean') { sets.push(`active = $${i++}`); vals.push(b.active); }
         if (typeof b.pin === 'string' && b.pin.trim().length >= 4) { sets.push(`pin_hash = $${i++}`); vals.push(hashPin(b.pin.trim())); }
