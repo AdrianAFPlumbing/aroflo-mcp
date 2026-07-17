@@ -4,6 +4,8 @@ import { loadEnv } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { createAroFloClient, createAroFloMcpServer } from './app.js';
 import { startHttpServer, stopHttpServer } from './http.js';
+import { initSchema } from '../db/db.js';
+import { startTaskSync, stopTaskSync } from '../sync/sync.js';
 
 function registerShutdown(handler: () => Promise<void>): void {
   process.on('SIGINT', () => {
@@ -35,6 +37,15 @@ async function startHttpMode(): Promise<void> {
   const env = loadEnv();
   const client = createAroFloClient(env);
 
+  // Portal additions: prepare the database (no-op without DATABASE_URL) and
+  // start the background AroFlo -> DB task sync so data stays live.
+  try {
+    await initSchema();
+  } catch (error) {
+    logger.error({ err: error }, 'Portal schema init failed (continuing without DB features)');
+  }
+  startTaskSync(client);
+
   const httpServer = await startHttpServer({
     host: env.MCP_HTTP_HOST,
     port: env.MCP_HTTP_PORT,
@@ -44,6 +55,7 @@ async function startHttpMode(): Promise<void> {
 
   registerShutdown(async () => {
     logger.info('Shutting down AroFlo MCP server (http)');
+    stopTaskSync();
     await stopHttpServer(httpServer);
     process.exit(0);
   });
