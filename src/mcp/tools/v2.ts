@@ -23,7 +23,7 @@ const fieldsSchema = z
   .string()
   .optional()
   .describe(
-    'Comma-separated top-level fields to return (v2 `_fields`), e.g. "id,jobNumber,name,status,client[name],taskResources[resource[givenName,familyName]]". Omit for the full record.'
+    'Comma-separated fields to return (v2 `_fields`), bracket notation for sub-fields. Field names differ per endpoint: list tasks -> "id,jobNumber,name,status,client[name],taskResources[resource[givenName,familyName]]"; single task -> "id,jobNumber,name,status,substatus[name],client[name],resources,description,dueDate,customerOrderNumber,referenceNumber"; notes -> "id,timestampCreated,note[content,visibility,postedBy[givenName,familyName]]". Omit for the full record.'
   );
 const outputSchema = z.object({}).passthrough();
 const readOnly = { readOnlyHint: true, idempotentHint: true, openWorldHint: true };
