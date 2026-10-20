@@ -194,9 +194,13 @@ Example report: open projects with labour hours per task (recommended for progre
 
 Set `AROFLO_V2_TOKEN` (a Personal Access Token from Site Administration > Settings > General > AroFlo API > API v2) to enable the v2 tools alongside the legacy zone tools:
 
-- `aroflo_v2_get_tasks` — `GET /v2/tasks`
-- `aroflo_v2_get_task` — `GET /v2/tasks/{taskId}`
+- `aroflo_v2_get_tasks` — `GET /v2/tasks` (status, client, assignee, date and sort filters; `limit` max 100; no job-number filter)
+- `aroflo_v2_get_task` — `GET /v2/tasks/{taskId}` by v2 id **or job number**
+- `aroflo_v2_get_task_notes` — `GET /v2/tasks/{taskId}/notes` by v2 id or job number
+- `aroflo_v2_assign_task` — `PUT /v2/tasks/{taskId}/resources` (replaces the assignee set)
 - `aroflo_v2_get` — read-only GET against any v2 path, for exploring endpoints while the schema is in beta
 - `aroflo_v2_convert_ids` — `POST /v2/idconversions`, maps legacy ids to v2 ids
 
-v2 uses bearer-token auth (no HMAC signing) and a different id encoding to the legacy API. Breaking changes are published weekly at https://docs.api.aroflo.com/blog/ — the legacy credentials must stay in place.
+All tools accept `fields` (v2 `_fields`) to trim the response, e.g. `id,jobNumber,name,client[name]`.
+
+v2 uses bearer-token auth (no HMAC signing) and a different id encoding to the legacy API. Job-number lookups bridge through the legacy Tasks zone and `/idconversions` because v2 has no job-number filter. Breaking changes are published weekly at https://docs.api.aroflo.com/blog/ — the legacy credentials must stay in place.

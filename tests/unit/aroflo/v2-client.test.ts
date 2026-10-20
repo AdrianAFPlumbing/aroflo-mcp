@@ -42,3 +42,33 @@ describe('loadEnv (v2)', () => {
     expect(env.AROFLO_V2_TOKEN).toBeUndefined();
   });
 });
+
+describe('v2 bridge', () => {
+  it('resolves a job number through legacy Tasks then idconversions', async () => {
+    const { v2TaskIdForJobNumber } = await import('../../../src/aroflo/v2-bridge.js');
+    const legacy = {
+      get: async (_zone: string, opts: { where?: string[] }) => {
+        expect(opts.where).toEqual(['and|jobnumber|=|267381']);
+        return {
+          httpStatus: 200,
+          headers: {},
+          rateLimits: {},
+          data: { zoneresponse: { tasks: [{ taskid: 'LEGACY==', jobnumber: '267381' }] } }
+        };
+      }
+    };
+    const v2 = {
+      post: async (path: string, body: { ids: string[] }) => {
+        expect(path).toBe('idconversions');
+        expect(body.ids).toEqual(['LEGACY==']);
+        return {
+          httpStatus: 200,
+          headers: {},
+          data: { count: 1, items: [{ legacyId: 'LEGACY==', id: '72M8000001' }] }
+        };
+      }
+    };
+    const r = await v2TaskIdForJobNumber(legacy as any, v2 as any, 267381);
+    expect(r).toEqual({ legacyTaskId: 'LEGACY==', taskId: '72M8000001' });
+  });
+});

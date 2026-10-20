@@ -1,7 +1,9 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
-import type { AroFloV2Client, V2QueryValue } from '../../aroflo/v2-client.js';
+import type { AroFloClient } from '../../aroflo/client.js';
+import { convertLegacyIds, v2TaskIdForJobNumber } from '../../aroflo/v2-bridge.js';
+import type { AroFloV2Client, AroFloV2Response, V2QueryValue } from '../../aroflo/v2-client.js';
 import { errorToolResult, successToolResult } from './shared.js';
 
 /**
@@ -9,25 +11,59 @@ import { errorToolResult, successToolResult } from './shared.js';
  *
  * These sit alongside the legacy zone tools so the two APIs can be compared and
  * migrated one tool at a time. Record ids returned here are v2-encoded and are
- * NOT interchangeable with legacy ids.
+ * NOT interchangeable with legacy ids; tools that take a job number resolve it
+ * through the legacy API + /idconversions (see v2-bridge.ts).
+ *
+ * Reference: https://docs.api.aroflo.com/ (schema changes weekly — check the blog).
  */
 
 const queryValueSchema = z.union([z.string(), z.number(), z.boolean()]);
-
 const modeSchema = z.enum(['data', 'raw']).default('data');
+const fieldsSchema = z
+  .string()
+  .optional()
+  .describe(
+    'Comma-separated top-level fields to return (v2 `_fields`), e.g. "id,jobNumber,name,status,client[name],taskResources[resource[givenName,familyName]]". Omit for the full record.'
+  );
+const outputSchema = z.object({}).passthrough();
+const readOnly = { readOnlyHint: true, idempotentHint: true, openWorldHint: true };
 
-function buildListResult(
-  response: { httpStatus: number; headers: Record<string, string>; data: unknown },
-  mode: 'data' | 'raw'
+/** Either a v2 task id or a 6-digit job number. */
+const taskRefSchema = {
+  taskId: z.string().min(1).optional().describe('v2-encoded task id'),
+  jobNumber: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe('AroFlo job number (resolved to a v2 id via the legacy API + /idconversions)')
+};
+
+function errMode(mode: 'data' | 'raw'): 'data' | 'debug' {
+  return mode === 'raw' ? 'debug' : 'data';
+}
+
+function listResult(
+  response: AroFloV2Response,
+  mode: 'data' | 'raw',
+  extra: Record<string, unknown> = {}
 ) {
   const data = (response.data ?? {}) as Record<string, unknown>;
   const items = Array.isArray(data.items) ? data.items : [];
+  const page = (data.page ?? {}) as Record<string, unknown>;
   const out: Record<string, unknown> = {
     api: 'v2',
+    ...extra,
     items,
     count: typeof data.count === 'number' ? data.count : items.length,
-    page: data.page
+    page
   };
+  const pageNumber = Number(page.number);
+  const pageCount = Number(page.count);
+  if (Number.isFinite(pageNumber) && Number.isFinite(pageCount)) {
+    out.hasMore = pageNumber < pageCount;
+    if (pageNumber < pageCount) out.nextPage = pageNumber + 1;
+  }
   if (mode === 'raw') {
     out.httpStatus = response.httpStatus;
     out.rawResponse = response.data;
@@ -35,42 +71,104 @@ function buildListResult(
   return successToolResult(out);
 }
 
-export function registerV2Tools(server: McpServer, client: AroFloV2Client): void {
+async function resolveTaskId(
+  legacy: AroFloClient,
+  v2: AroFloV2Client,
+  args: { taskId?: string; jobNumber?: number }
+): Promise<{ taskId: string; resolvedFrom?: Record<string, unknown> }> {
+  if (args.taskId) return { taskId: args.taskId };
+  if (args.jobNumber) {
+    const r = await v2TaskIdForJobNumber(legacy, v2, args.jobNumber);
+    return {
+      taskId: r.taskId,
+      resolvedFrom: { jobNumber: args.jobNumber, legacyTaskId: r.legacyTaskId }
+    };
+  }
+  throw new Error('Provide either taskId or jobNumber');
+}
+
+export function registerV2Tools(server: McpServer, v2: AroFloV2Client, legacy: AroFloClient): void {
   server.registerTool(
     'aroflo_v2_get_tasks',
     {
       title: 'AroFlo v2: List tasks',
       description:
-        'List tasks via AroFlo APIv2 (GET /v2/tasks). status: 0=NOT_STARTED, 1=IN_PROGRESS, 2=PENDING, 3=COMPLETED, 4=ARCHIVED. ' +
-        'Any extra query parameters can be passed via `query` (the v2 schema changes weekly — see https://docs.api.aroflo.com/blog/).',
+        'List tasks via AroFlo APIv2 (GET /v2/tasks). Returns 30 per page by default (limit max 100), newest first. ' +
+        'status: 0=NOT_STARTED, 1=IN_PROGRESS, 2=PENDING, 3=COMPLETED, 4=ARCHIVED. There is NO job-number filter on this endpoint — use aroflo_v2_get_task with jobNumber for a single job. ' +
+        'Use `fields` to keep responses small. Any other v2 query parameter can be passed via `query`.',
       inputSchema: {
         status: z.number().int().min(0).max(4).optional(),
-        subStatusList: z.string().optional().describe('Comma-separated v2-encoded substatus ids'),
+        statusList: z.string().optional().describe('Comma-separated status codes, e.g. "0,1,2"'),
+        businessUnitId: z.string().optional().describe('v2-encoded business unit id'),
+        clientId: z.string().optional().describe('v2-encoded client id'),
+        assignedUserId: z.string().optional().describe('v2-encoded user id (assignedFilterUserId)'),
+        projectId: z.string().optional(),
+        locationId: z.string().optional(),
+        requiredByFrom: z.string().optional().describe('ISO date'),
+        requiredByTo: z.string().optional().describe('ISO date'),
+        sortBy: z
+          .enum([
+            'requiredby',
+            'client',
+            'clientcode',
+            'status',
+            'lastupdateutc',
+            'jobnumber',
+            'custon',
+            'service',
+            'priority',
+            'task',
+            'substatus',
+            'schedule',
+            'modified',
+            'completion'
+          ])
+          .optional(),
+        ascending: z.boolean().optional(),
+        userBuAccessType: z.enum(['childbus', 'thisbu', 'allbus']).optional(),
         page: z.number().int().positive().optional(),
-        pageSize: z.number().int().positive().max(500).optional(),
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .max(100)
+          .optional()
+          .describe('Items per page (default 30, max 100)'),
+        fields: fieldsSchema,
         query: z
           .record(z.string(), queryValueSchema)
           .optional()
-          .describe('Additional query parameters passed through verbatim'),
+          .describe('Additional v2 query parameters passed through verbatim'),
         mode: modeSchema
       },
-      outputSchema: z.object({}).passthrough(),
-      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true }
+      outputSchema,
+      annotations: readOnly
     },
     async (args) => {
       try {
         const query: Record<string, V2QueryValue> = {
           status: args.status,
-          subStatusList: args.subStatusList,
+          statusList: args.statusList,
+          businessUnitId: args.businessUnitId,
+          clientId: args.clientId,
+          assignedFilterUserId: args.assignedUserId,
+          projectId: args.projectId,
+          locationId: args.locationId,
+          requiredByFrom: args.requiredByFrom,
+          requiredByTo: args.requiredByTo,
+          sortBy: args.sortBy,
+          ascending: args.ascending,
+          userBuAccessType: args.userBuAccessType,
           page: args.page,
-          pageSize: args.pageSize,
+          limit: args.limit,
+          _fields: args.fields,
           ...(args.query ?? {})
         };
-        const response = await client.get('tasks', query);
-        return buildListResult(response, args.mode);
+        const response = await v2.get('tasks', query);
+        return listResult(response, args.mode);
       } catch (error) {
         return errorToolResult(error, {
-          mode: args.mode === 'raw' ? 'debug' : 'data',
+          mode: errMode(args.mode),
           debug: { api: 'v2', path: 'tasks' }
         });
       }
@@ -81,28 +179,103 @@ export function registerV2Tools(server: McpServer, client: AroFloV2Client): void
     'aroflo_v2_get_task',
     {
       title: 'AroFlo v2: Get task',
-      description: 'Fetch a single task by its v2-encoded id (GET /v2/tasks/{taskId}).',
-      inputSchema: {
-        taskId: z
-          .string()
-          .min(1)
-          .describe('v2-encoded task id (not a legacy taskid or job number)'),
-        mode: modeSchema
-      },
-      outputSchema: z.object({}).passthrough(),
-      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true }
+      description:
+        'Fetch a single task via APIv2 (GET /v2/tasks/{taskId}) by v2 id or by job number. ' +
+        'Includes assignees (taskResources), client, priority, substatus, task type, dates and reference numbers in one call.',
+      inputSchema: { ...taskRefSchema, fields: fieldsSchema, mode: modeSchema },
+      outputSchema,
+      annotations: readOnly
     },
     async (args) => {
       try {
-        const response = await client.get(`tasks/${encodeURIComponent(args.taskId)}`);
-        const out: Record<string, unknown> = { api: 'v2', task: response.data };
+        const { taskId, resolvedFrom } = await resolveTaskId(legacy, v2, args);
+        const response = await v2.get(`tasks/${encodeURIComponent(taskId)}`, {
+          _fields: args.fields
+        });
+        const out: Record<string, unknown> = { api: 'v2', taskId, task: response.data };
+        if (resolvedFrom) out.resolvedFrom = resolvedFrom;
         if (args.mode === 'raw') out.httpStatus = response.httpStatus;
         return successToolResult(out);
       } catch (error) {
-        return errorToolResult(error, {
-          mode: args.mode === 'raw' ? 'debug' : 'data',
-          debug: { api: 'v2', path: `tasks/${args.taskId}` }
+        return errorToolResult(error, { mode: errMode(args.mode), debug: { api: 'v2', args } });
+      }
+    }
+  );
+
+  server.registerTool(
+    'aroflo_v2_get_task_notes',
+    {
+      title: 'AroFlo v2: Get task notes',
+      description:
+        'List the notes on a task via APIv2 (GET /v2/tasks/{taskId}/notes), by v2 id or job number.',
+      inputSchema: {
+        ...taskRefSchema,
+        includeEmailNotes: z.boolean().optional(),
+        removeDuplicateEmails: z.boolean().optional(),
+        fields: fieldsSchema,
+        mode: modeSchema
+      },
+      outputSchema,
+      annotations: readOnly
+    },
+    async (args) => {
+      try {
+        const { taskId, resolvedFrom } = await resolveTaskId(legacy, v2, args);
+        const response = await v2.get(`tasks/${encodeURIComponent(taskId)}/notes`, {
+          includeEmailNotes: args.includeEmailNotes,
+          removeDuplicateEmails: args.removeDuplicateEmails,
+          _fields: args.fields
         });
+        return listResult(response, args.mode, {
+          taskId,
+          ...(resolvedFrom ? { resolvedFrom } : {})
+        });
+      } catch (error) {
+        return errorToolResult(error, { mode: errMode(args.mode), debug: { api: 'v2', args } });
+      }
+    }
+  );
+
+  server.registerTool(
+    'aroflo_v2_assign_task',
+    {
+      title: 'AroFlo v2: Assign task resources',
+      description:
+        'Set the assignees on a task via APIv2 (PUT /v2/tasks/{taskId}/resources). REPLACES the current set: anyone not listed is unassigned, and at least one resource is required. ' +
+        'Resource ids are v2-encoded (use aroflo_v2_convert_ids for legacy user ids, or aroflo_v2_get with path "users").',
+      inputSchema: {
+        ...taskRefSchema,
+        assignedResources: z
+          .array(
+            z.object({
+              id: z.string().min(1).describe('v2-encoded user or org id'),
+              type: z.enum(['USER', 'BUSINESS_UNIT', 'CONTRACTOR'])
+            })
+          )
+          .min(1),
+        mode: modeSchema
+      },
+      outputSchema,
+      annotations: {
+        readOnlyHint: false,
+        idempotentHint: true,
+        destructiveHint: true,
+        openWorldHint: true
+      }
+    },
+    async (args) => {
+      try {
+        const { taskId, resolvedFrom } = await resolveTaskId(legacy, v2, args);
+        const response = await v2.request('PUT', `tasks/${encodeURIComponent(taskId)}/resources`, {
+          body: { assignedResources: args.assignedResources }
+        });
+        return listResult(response, args.mode, {
+          taskId,
+          ok: true,
+          ...(resolvedFrom ? { resolvedFrom } : {})
+        });
+      } catch (error) {
+        return errorToolResult(error, { mode: errMode(args.mode), debug: { api: 'v2', args } });
       }
     }
   );
@@ -112,31 +285,32 @@ export function registerV2Tools(server: McpServer, client: AroFloV2Client): void
     {
       title: 'AroFlo v2: Generic GET',
       description:
-        'Read-only GET against any AroFlo APIv2 path (e.g. "clients", "users", "locations", "workorders", "quotes/{id}/lineitems", "types/tasks", "worktypes"). ' +
-        'Use this to explore endpoints while the v2 schema is still in beta. Query parameters are passed through verbatim.',
+        'Read-only GET against any AroFlo APIv2 path (e.g. "clients", "users", "locations", "workorders", "quotes/{id}/lineitems", "types/tasks", "worktypes", "tasks/{id}/documents"). ' +
+        'Use this to explore endpoints while the v2 schema is in beta. Query parameters are passed through verbatim; most list endpoints accept page, limit and _fields.',
       inputSchema: {
         path: z.string().min(1).describe('Path relative to /v2/, without a leading slash'),
         query: z.record(z.string(), queryValueSchema).optional(),
+        fields: fieldsSchema,
         mode: modeSchema
       },
-      outputSchema: z.object({}).passthrough(),
-      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true }
+      outputSchema,
+      annotations: readOnly
     },
     async (args) => {
       try {
-        const response = await client.get(args.path, args.query);
+        const response = await v2.get(args.path, { _fields: args.fields, ...(args.query ?? {}) });
         const data = response.data;
         const isList =
           data !== null &&
           typeof data === 'object' &&
           Array.isArray((data as Record<string, unknown>).items);
-        if (isList) return buildListResult(response, args.mode);
+        if (isList) return listResult(response, args.mode, { path: args.path });
         const out: Record<string, unknown> = { api: 'v2', path: args.path, data };
         if (args.mode === 'raw') out.httpStatus = response.httpStatus;
         return successToolResult(out);
       } catch (error) {
         return errorToolResult(error, {
-          mode: args.mode === 'raw' ? 'debug' : 'data',
+          mode: errMode(args.mode),
           debug: { api: 'v2', path: args.path }
         });
       }
@@ -148,22 +322,18 @@ export function registerV2Tools(server: McpServer, client: AroFloV2Client): void
     {
       title: 'AroFlo v2: Convert legacy ids',
       description:
-        'Convert legacy API record ids into their APIv2 equivalents (POST /v2/idconversions). Format conversion only — no access check is performed. ' +
-        'Ids are returned in the order supplied.',
+        'Convert legacy API record ids (taskid, userid, orgid, clientid…) into their APIv2 equivalents (POST /v2/idconversions). ' +
+        'Format conversion only — no access check. Max 100 per call; results come back in the order supplied.',
       inputSchema: {
-        ids: z
-          .array(z.string().min(1))
-          .min(1)
-          .max(100)
-          .describe('Legacy-encoded ids (e.g. a legacy taskid or userid)')
+        ids: z.array(z.string().min(1)).min(1).max(100).describe('Legacy-encoded ids')
       },
-      outputSchema: z.object({}).passthrough(),
-      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true }
+      outputSchema,
+      annotations: readOnly
     },
     async (args) => {
       try {
-        const response = await client.post('idconversions', { ids: args.ids });
-        return successToolResult({ api: 'v2', data: response.data });
+        const items = await convertLegacyIds(v2, args.ids);
+        return successToolResult({ api: 'v2', count: items.length, items });
       } catch (error) {
         return errorToolResult(error, {
           mode: 'debug',

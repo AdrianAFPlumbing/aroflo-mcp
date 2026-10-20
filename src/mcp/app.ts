@@ -58,7 +58,7 @@ export function createAroFloMcpServer(client: AroFloClient, v2Client?: AroFloV2C
   registerZoneGetTools(server, client);
   registerReportTools(server, client);
   if (v2Client) {
-    registerV2Tools(server, v2Client);
+    registerV2Tools(server, v2Client, client);
   }
   registerApiDocsResources(server);
 
