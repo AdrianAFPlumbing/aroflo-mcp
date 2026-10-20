@@ -54,3 +54,26 @@ args = ["/absolute/path/to/aroflo-mcp/dist/mcp/server.js"]
 # ... your AROFLO_* env vars ...
 MCP_TRANSPORT = "stdio"
 ```
+
+## ANSTO SAP Purchase Orders (PO-only jobs)
+
+ANSTO's SAP PO email (subject `ANSTO Purch. Order 4300xxxxxx`) has a boilerplate
+body; the 7-digit Work Order No, scope and contact are only inside the attached
+PDF. Planned/contract maintenance items are frequently issued as a PO only, with
+no separate Work Order email, so an email-text pipeline cannot raise them.
+
+`src/aroflo/ansto-po.ts` reads the PO PDF that AroFlo's email import attaches to
+the task and acts deterministically:
+
+- Work Order No already has a job (Cust ON match) → write the Order No into the
+  primary job's **ANSTO Order No** custom field, archive the PO import as
+  `[DUPLICATE OF JN …]`.
+- No job yet → convert the PO import into the job (name, Cust ON = WO No, HTML
+  description from the PO, custom field, NEW TASK substatus).
+
+Tools: `aroflo_ansto_sweep_po_tasks` (run daily; `dryRun` previews),
+`aroflo_ansto_process_po` (one job number, or raw PO text), `aroflo_ansto_parse_po_text`.
+
+REST (for Power Automate / cron): `POST /ansto/sweep?dryRun=1` and
+`POST /ansto/po/<jobnumber>`, protected by env `ANSTO_WEBHOOK_TOKEN`
+(header `x-ansto-token` or `?token=`). Endpoints return 401 until the env var is set.

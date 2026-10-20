@@ -11,6 +11,7 @@ import { registerMutateRecordTool } from './tools/mutate-record.js';
 import { registerZoneGetTools } from './tools/get-zones.js';
 import { registerReportTools } from './tools/reports.js';
 import { registerV2Tools } from './tools/v2.js';
+import { registerAnstoTools } from './tools/ansto.js';
 import { AroFloV2Client } from '../aroflo/v2-client.js';
 
 /**
@@ -57,6 +58,7 @@ export function createAroFloMcpServer(client: AroFloClient, v2Client?: AroFloV2C
   registerMutateRecordTool(server, client);
   registerZoneGetTools(server, client);
   registerReportTools(server, client);
+  registerAnstoTools(server, client);
   if (v2Client) {
     registerV2Tools(server, v2Client, client);
   }

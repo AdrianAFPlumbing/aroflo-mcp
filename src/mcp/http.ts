@@ -94,6 +94,49 @@ export async function handleMcpHttpRequest(
   }
   // --------------------------------------------------------------------------
 
+  // --- ANSTO SAP PO webhook / sweep -----------------------------------------
+  // POST /ansto/sweep?dryRun=1   -> process every unmatched ANSTO PO import
+  // POST /ansto/po/<jobnumber>   -> process one AroFlo task that has a PO PDF
+  // Protected by ANSTO_WEBHOOK_TOKEN (header x-ansto-token or ?token=).
+  if (pathname === '/ansto/sweep' || /^\/ansto\/po\/\d{6}$/.test(pathname)) {
+    if (req.method !== 'POST') {
+      writeJson(res, 405, { status: 'error', message: 'Method not allowed' });
+      return;
+    }
+    const expected = process.env['ANSTO_WEBHOOK_TOKEN']?.trim();
+    const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
+    const supplied =
+      (req.headers['x-ansto-token'] as string | undefined) ?? url.searchParams.get('token') ?? '';
+    if (!expected || supplied !== expected) {
+      writeJson(res, 401, { status: 'error', message: 'Unauthorised' });
+      return;
+    }
+    try {
+      const { sweepPoTasks, processPoTask, getTaskByJobNumber } =
+        await import('../aroflo/ansto-po.js');
+      const dryRun = ['1', 'true'].includes((url.searchParams.get('dryRun') ?? '').toLowerCase());
+      if (pathname === '/ansto/sweep') {
+        writeJson(res, 200, { status: 'ok', ...(await sweepPoTasks(client, { dryRun })) });
+        return;
+      }
+      const jobnumber = pathname.split('/').pop()!;
+      const task = await getTaskByJobNumber(client, jobnumber);
+      if (!task) {
+        writeJson(res, 404, { status: 'error', message: `Job ${jobnumber} not found` });
+        return;
+      }
+      writeJson(res, 200, { status: 'ok', ...(await processPoTask(client, task, { dryRun })) });
+    } catch (error) {
+      logger.error({ err: error }, 'Failed to handle /ansto request');
+      writeJson(res, 500, {
+        status: 'error',
+        message: error instanceof Error ? error.message : 'Internal server error'
+      });
+    }
+    return;
+  }
+  // --------------------------------------------------------------------------
+
   // --- Quote Portal AI proxy ------------------------------------------------
   // Signs a prompt through Anthropic server-side so the portal never holds a key.
   if (pathname === '/ai/complete' || pathname === '/ai/complete/') {
