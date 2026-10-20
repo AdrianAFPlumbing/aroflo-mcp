@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildDescriptionHtml,
   buildTaskName,
+  findPrimaryForPo,
   findPrimaryForWo,
   needsPoProcessing,
   parseAnstoPoText,
@@ -73,6 +74,28 @@ describe('needsPoProcessing / findPrimaryForWo', () => {
     expect(
       needsPoProcessing(lite({ documents: [{ name: '8202932.pdf', url: 'https://x' }] }))
     ).toBe(false);
+    expect(
+      needsPoProcessing(
+        lite({ documents: pdf, custon: '4300168300', taskname: 'ANSTO B16 - Sink' })
+      )
+    ).toBe(false);
+    expect(
+      needsPoProcessing(lite({ documents: pdf, taskname: '[NOT A JOB - ANSTO SAP PO only' }))
+    ).toBe(true);
+  });
+
+  it('pairs a no-WO PO on its order number', () => {
+    const tasks = [
+      lite({ taskid: 'a', jobnumber: '262843', custon: '4300163853' }),
+      lite({
+        taskid: 'b',
+        jobnumber: '262985',
+        custon: '',
+        taskname: '[DUPLICATE OF JN 1] x',
+        orderNo: '4300163853'
+      })
+    ];
+    expect(findPrimaryForPo(tasks, '4300163853', 'self')?.jobnumber).toBe('262843');
   });
 
   it('prefers a live primary with the WO as Cust ON', () => {

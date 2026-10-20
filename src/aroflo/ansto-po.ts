@@ -339,6 +339,8 @@ export function needsPoProcessing(task: AnstoTaskLite): boolean {
   const hasPoPdf = task.documents.some((d) => PO_PDF_RE.test(d.name));
   if (!hasPoPdf) return false;
   if (SEVEN_DIGIT_WO_RE.test(task.custon)) return false; // already paired / primary
+  // Raised under the PO number because the PO had no Work Order No - already a job.
+  if (/^4300\d{6}$/.test(task.custon) && !task.taskname.startsWith('[')) return false;
   if (/^\[DUPLICATE OF JN/i.test(task.taskname)) return false;
   return true;
 }
@@ -359,6 +361,24 @@ export function findPrimaryForWo(
     if (aExact !== bExact) return bExact - aExact;
     return Number(b.jobnumber) - Number(a.jobnumber);
   });
+  return pool[0];
+}
+
+export function findPrimaryForPo(
+  tasks: AnstoTaskLite[],
+  orderNo: string,
+  excludeTaskId: string
+): AnstoTaskLite | undefined {
+  const matches = tasks.filter(
+    (t) =>
+      t.taskid !== excludeTaskId &&
+      !/^\[(DUPLICATE|NOT A JOB|UNMATCHED)/i.test(t.taskname) &&
+      (t.orderNo.includes(orderNo) || t.custon.includes(orderNo))
+  );
+  if (matches.length === 0) return undefined;
+  const live = matches.filter((t) => t.status.toLowerCase() !== 'archived');
+  const pool = live.length ? live : matches;
+  pool.sort((a, b) => Number(b.jobnumber) - Number(a.jobnumber));
   return pool[0];
 }
 
@@ -470,25 +490,15 @@ async function applyParsedPo(
 ): Promise<PoResult> {
   const importTask = options.importTask;
 
-  if (!po.workOrderNo) {
-    if (importTask && !options.dryRun) {
-      await postTask(
-        client,
-        `<tasks><task><taskid>${importTask.taskid}</taskid><taskname>${cdata(
-          `[ANSTO PO ${orderNo} - WO No not readable] check PDF`
-        )}</taskname></task></tasks>`
-      );
-    }
-    return {
-      outcome: 'wo-not-readable',
-      jobnumber: importTask?.jobnumber,
-      orderNo,
-      note: 'PDF text did not contain "Work Order No"'
-    };
-  }
-
   const known = options.knownTasks ?? (await listRecentAnstoTasks(client));
-  const primary = findPrimaryForWo(known, po.workOrderNo, importTask?.taskid ?? '');
+
+  // Some reactive POs are issued with the "Work Order No" field blank. Never park
+  // them: pair on the PO number if a job already carries it, otherwise raise the
+  // job under the PO number (Cust ON = 4300...) so it is visible and actioned.
+  const reference = po.workOrderNo ?? orderNo;
+  const primary = po.workOrderNo
+    ? findPrimaryForWo(known, po.workOrderNo, importTask?.taskid ?? '')
+    : findPrimaryForPo(known, orderNo, importTask?.taskid ?? '');
 
   if (primary) {
     if (options.dryRun) {
@@ -515,7 +525,7 @@ async function applyParsedPo(
         client,
         `<tasks><task><taskid>${importTask.taskid}</taskid><taskname>${cdata(
           `[DUPLICATE OF JN ${primary.jobnumber}] ANSTO PO ${orderNo}`
-        )}</taskname><custon>${cdata(po.workOrderNo)}</custon><status>Archived</status></task></tasks>`
+        )}</taskname><custon>${cdata(reference)}</custon><status>Archived</status></task></tasks>`
       );
     }
     logger.info(
@@ -538,7 +548,11 @@ async function applyParsedPo(
 
   // No primary exists: this PO IS the job.
   const taskName = buildTaskName(po);
-  const description = buildDescriptionHtml(po);
+  const description =
+    buildDescriptionHtml(po) +
+    (po.workOrderNo
+      ? ''
+      : `\n<p><strong>CHECK:</strong> The Work Order No field is blank on this PO, so the job is raised under the PO number. Before scheduling, check for an existing ANSTO job for the same works (same building and fault) and merge if found.</p>`);
 
   if (options.dryRun) {
     return {
@@ -553,7 +567,7 @@ async function applyParsedPo(
 
   const common =
     `<taskname>${cdata(taskName)}</taskname>` +
-    `<custon>${cdata(po.workOrderNo)}</custon>` +
+    `<custon>${cdata(reference)}</custon>` +
     `<description>${cdata(description)}</description>` +
     `<status>Not Started</status>` +
     `<substatus><substatusid>${ANSTO_DEFAULTS.newTaskSubstatusId}</substatusid></substatus>` +
