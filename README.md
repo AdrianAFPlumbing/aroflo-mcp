@@ -189,3 +189,14 @@ Example report: open projects with labour hours per task (recommended for progre
 - `docs/runbooks.md`
 - `docs/deployment.md`
 - `docs/api/*`
+
+## AroFlo APIv2 (Open Beta)
+
+Set `AROFLO_V2_TOKEN` (a Personal Access Token from Site Administration > Settings > General > AroFlo API > API v2) to enable the v2 tools alongside the legacy zone tools:
+
+- `aroflo_v2_get_tasks` — `GET /v2/tasks`
+- `aroflo_v2_get_task` — `GET /v2/tasks/{taskId}`
+- `aroflo_v2_get` — read-only GET against any v2 path, for exploring endpoints while the schema is in beta
+- `aroflo_v2_convert_ids` — `POST /v2/idconversions`, maps legacy ids to v2 ids
+
+v2 uses bearer-token auth (no HMAC signing) and a different id encoding to the legacy API. Breaking changes are published weekly at https://docs.api.aroflo.com/blog/ — the legacy credentials must stay in place.

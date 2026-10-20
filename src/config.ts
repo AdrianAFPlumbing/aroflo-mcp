@@ -19,6 +19,15 @@ const envSchema = z.object({
     }),
   AROFLO_TIMEOUT_MS: z.coerce.number().int().positive().default(65_000),
   AROFLO_MAX_RETRIES: z.coerce.number().int().min(0).max(10).default(2),
+  // APIv2 (Open Beta). Optional: v2 tools are only registered when a token is present.
+  AROFLO_V2_BASE_URL: z.string().url().default('https://api.aroflo.com/v2/'),
+  AROFLO_V2_TOKEN: z
+    .string()
+    .optional()
+    .transform((value) => {
+      const trimmed = value?.trim();
+      return trimmed && trimmed.length > 0 ? trimmed : undefined;
+    }),
   MCP_TRANSPORT: z.enum(['stdio', 'http']).default('stdio'),
   MCP_HTTP_HOST: z.string().default('127.0.0.1'),
   MCP_HTTP_PORT: z.coerce.number().int().positive().max(65535).default(3000),

@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 
 import type { AroFloClient } from '../aroflo/client.js';
+import type { AroFloV2Client } from '../aroflo/v2-client.js';
 import { logger } from '../utils/logger.js';
 import { createAroFloMcpServer } from './app.js';
 import { handleTasksRest } from './rest.js';
@@ -15,6 +16,7 @@ export interface HttpServerOptions {
   port: number;
   path: string;
   client: AroFloClient;
+  v2Client?: AroFloV2Client;
 }
 
 const ALLOWED_METHODS = new Set(['POST', 'GET', 'DELETE']);
@@ -51,7 +53,8 @@ export async function handleMcpHttpRequest(
   req: IncomingMessage,
   res: ServerResponse,
   client: AroFloClient,
-  mcpPath: string
+  mcpPath: string,
+  v2Client?: AroFloV2Client
 ): Promise<void> {
   setCorsHeaders(res);
 
@@ -137,7 +140,7 @@ export async function handleMcpHttpRequest(
     return;
   }
 
-  const mcpServer = createAroFloMcpServer(client);
+  const mcpServer = createAroFloMcpServer(client, v2Client);
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined
   });
@@ -177,7 +180,7 @@ export async function handleMcpHttpRequest(
 
 export async function startHttpServer(options: HttpServerOptions): Promise<Server> {
   const server = createServer((req, res) => {
-    void handleMcpHttpRequest(req, res, options.client, options.path);
+    void handleMcpHttpRequest(req, res, options.client, options.path, options.v2Client);
   });
 
   await new Promise<void>((resolve, reject) => {

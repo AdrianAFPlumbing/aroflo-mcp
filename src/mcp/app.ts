@@ -10,6 +10,24 @@ import { registerGetRecordTool } from './tools/get-record.js';
 import { registerMutateRecordTool } from './tools/mutate-record.js';
 import { registerZoneGetTools } from './tools/get-zones.js';
 import { registerReportTools } from './tools/reports.js';
+import { registerV2Tools } from './tools/v2.js';
+import { AroFloV2Client } from '../aroflo/v2-client.js';
+
+/**
+ * APIv2 client is optional: it is only created when AROFLO_V2_TOKEN is set, so
+ * deployments without a v2 token keep working exactly as before.
+ */
+export function createAroFloV2Client(env: AppEnv): AroFloV2Client | undefined {
+  if (!env.AROFLO_V2_TOKEN) {
+    return undefined;
+  }
+  return new AroFloV2Client({
+    baseUrl: env.AROFLO_V2_BASE_URL,
+    token: env.AROFLO_V2_TOKEN,
+    timeoutMs: env.AROFLO_TIMEOUT_MS,
+    maxRetries: env.AROFLO_MAX_RETRIES
+  });
+}
 
 export function createAroFloClient(env: AppEnv): AroFloClient {
   return new AroFloClientImpl({
@@ -27,7 +45,7 @@ export function createAroFloClient(env: AppEnv): AroFloClient {
   });
 }
 
-export function createAroFloMcpServer(client: AroFloClient): McpServer {
+export function createAroFloMcpServer(client: AroFloClient, v2Client?: AroFloV2Client): McpServer {
   const server = new McpServer({
     name: 'aroflo-mcp',
     version: '0.1.0'
@@ -39,6 +57,9 @@ export function createAroFloMcpServer(client: AroFloClient): McpServer {
   registerMutateRecordTool(server, client);
   registerZoneGetTools(server, client);
   registerReportTools(server, client);
+  if (v2Client) {
+    registerV2Tools(server, v2Client);
+  }
   registerApiDocsResources(server);
 
   return server;

@@ -2,7 +2,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 
 import { loadEnv } from '../config.js';
 import { logger } from '../utils/logger.js';
-import { createAroFloClient, createAroFloMcpServer } from './app.js';
+import { createAroFloClient, createAroFloMcpServer, createAroFloV2Client } from './app.js';
 import { startHttpServer, stopHttpServer } from './http.js';
 import { initSchema } from '../db/db.js';
 import { startTaskSync, stopTaskSync } from '../sync/sync.js';
@@ -20,7 +20,8 @@ function registerShutdown(handler: () => Promise<void>): void {
 async function startStdioMode(): Promise<void> {
   const env = loadEnv();
   const client = createAroFloClient(env);
-  const server = createAroFloMcpServer(client);
+  const v2Client = createAroFloV2Client(env);
+  const server = createAroFloMcpServer(client, v2Client);
   const transport = new StdioServerTransport();
 
   await server.connect(transport);
@@ -36,6 +37,8 @@ async function startStdioMode(): Promise<void> {
 async function startHttpMode(): Promise<void> {
   const env = loadEnv();
   const client = createAroFloClient(env);
+  const v2Client = createAroFloV2Client(env);
+  logger.info({ v2Enabled: Boolean(v2Client) }, 'AroFlo APIv2 tools');
 
   // Portal additions: prepare the database (no-op without DATABASE_URL) and
   // start the background AroFlo -> DB task sync so data stays live.
@@ -50,7 +53,8 @@ async function startHttpMode(): Promise<void> {
     host: env.MCP_HTTP_HOST,
     port: env.MCP_HTTP_PORT,
     path: env.MCP_HTTP_PATH,
-    client
+    client,
+    v2Client
   });
 
   registerShutdown(async () => {
