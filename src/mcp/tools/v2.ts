@@ -3,6 +3,12 @@ import { z } from 'zod';
 
 import type { AroFloClient } from '../../aroflo/client.js';
 import { convertLegacyIds, v2TaskIdForJobNumber } from '../../aroflo/v2-bridge.js';
+import {
+  patchTask,
+  resolvePriorityId,
+  resolveSubstatusId,
+  uploadTaskDocument
+} from '../../aroflo/v2-tasks.js';
 import type { AroFloV2Client, AroFloV2Response, V2QueryValue } from '../../aroflo/v2-client.js';
 import { errorToolResult, successToolResult } from './shared.js';
 
@@ -338,6 +344,159 @@ export function registerV2Tools(server: McpServer, v2: AroFloV2Client, legacy: A
         return errorToolResult(error, {
           mode: 'debug',
           debug: { api: 'v2', path: 'idconversions' }
+        });
+      }
+    }
+  );
+
+  server.registerTool(
+    'aroflo_v2_update_task',
+    {
+      title: 'AroFlo v2: Update task',
+      description:
+        'Partially update a task via APIv2 (PATCH /v2/tasks/{taskId}), by v2 id or job number. Only the fields supplied are changed. ' +
+        'Supports: description (HTML), customerOrderNumber (Cust ON), priority (by v2 id or name, e.g. "UNSW - HIGH"), substatus (by v2 id or name, e.g. "New Task"), status, and clearing priority/substatus. ' +
+        'Task name, due date, client and location are NOT updatable via v2 yet — use the legacy aroflo_create_or_update_record for those.',
+      inputSchema: {
+        ...taskRefSchema,
+        description: z
+          .string()
+          .optional()
+          .describe('New task description (HTML allowed; plain text is fine)'),
+        customerOrderNumber: z.string().max(50).optional().describe('Client reference / Cust ON'),
+        priority: z.string().optional().describe('Priority v2 id, or its name/short description'),
+        substatus: z.string().optional().describe('Substatus v2 id, or its name'),
+        status: z
+          .enum(['NOT_STARTED', 'IN_PROGRESS', 'PENDING', 'COMPLETED', 'ARCHIVED'])
+          .optional(),
+        clearPriority: z.boolean().optional(),
+        clearSubstatus: z.boolean().optional(),
+        linkedOrgId: z
+          .string()
+          .optional()
+          .describe(
+            'v2 client or business unit id used to narrow priority/substatus name lookups (defaults to the task client)'
+          ),
+        mode: modeSchema
+      },
+      outputSchema,
+      annotations: {
+        readOnlyHint: false,
+        idempotentHint: true,
+        destructiveHint: false,
+        openWorldHint: true
+      }
+    },
+    async (args) => {
+      try {
+        const { taskId, resolvedFrom } = await resolveTaskId(legacy, v2, args);
+        const resolved: Record<string, unknown> = {};
+
+        let linkedOrgId = args.linkedOrgId;
+        if (!linkedOrgId && (args.priority || args.substatus)) {
+          const t = await v2.get<{ client?: { id?: string } }>(
+            `tasks/${encodeURIComponent(taskId)}`,
+            {
+              _fields: 'client[id]'
+            }
+          );
+          linkedOrgId = t.data?.client?.id;
+        }
+
+        let priorityId: string | undefined;
+        if (args.priority) {
+          const p = await resolvePriorityId(v2, args.priority, linkedOrgId);
+          priorityId = p.id;
+          resolved.priority = p;
+        }
+        let subStatusId: string | undefined;
+        if (args.substatus) {
+          const sub = await resolveSubstatusId(v2, args.substatus, linkedOrgId);
+          subStatusId = sub.id;
+          resolved.substatus = sub;
+        }
+
+        const response = await patchTask(v2, taskId, {
+          description: args.description,
+          customerOrderNumber: args.customerOrderNumber,
+          priorityId,
+          subStatusId,
+          status: args.status,
+          clearPriority: args.clearPriority,
+          clearSubstatus: args.clearSubstatus
+        });
+
+        const out: Record<string, unknown> = { api: 'v2', ok: true, taskId, task: response.data };
+        if (Object.keys(resolved).length) out.resolved = resolved;
+        if (resolvedFrom) out.resolvedFrom = resolvedFrom;
+        if (args.mode === 'raw') out.httpStatus = response.httpStatus;
+        return successToolResult(out);
+      } catch (error) {
+        return errorToolResult(error, {
+          mode: errMode(args.mode),
+          debug: { api: 'v2', args: { ...args, description: undefined } }
+        });
+      }
+    }
+  );
+
+  server.registerTool(
+    'aroflo_v2_upload_document',
+    {
+      title: 'AroFlo v2: Upload document to task',
+      description:
+        'Attach a file to a task via APIv2 (POST /v2/tasks/{taskId}/documents/upload), by v2 id or job number. Content is base64 (raw, or a data: URL). ' +
+        'Suitable for small files passed through a tool call (a few MB); for larger files, or from Power Automate, use the HTTP endpoint POST /v2/tasks/{jobNumber}/documents instead.',
+      inputSchema: {
+        ...taskRefSchema,
+        filename: z.string().min(3).describe('Original filename including extension'),
+        base64: z.string().optional().describe('Raw base64 content (no data: prefix)'),
+        dataUrl: z.string().optional().describe('data:<mime>;base64,... (alternative to base64)'),
+        comment: z.string().optional(),
+        description: z.string().optional(),
+        categoryId: z
+          .string()
+          .optional()
+          .describe('v2 folder id on the task (GET /tasks/{id}/documents/folders)')
+      },
+      outputSchema,
+      annotations: {
+        readOnlyHint: false,
+        idempotentHint: false,
+        destructiveHint: false,
+        openWorldHint: true
+      }
+    },
+    async (args) => {
+      try {
+        const { taskId, resolvedFrom } = await resolveTaskId(legacy, v2, args);
+        const { response, bytes } = await uploadTaskDocument(v2, taskId, {
+          filename: args.filename,
+          base64: args.base64,
+          dataUrl: args.dataUrl,
+          comment: args.comment,
+          description: args.description,
+          categoryId: args.categoryId
+        });
+        const out: Record<string, unknown> = {
+          api: 'v2',
+          ok: true,
+          taskId,
+          filename: args.filename,
+          bytes,
+          document: response.data
+        };
+        if (resolvedFrom) out.resolvedFrom = resolvedFrom;
+        return successToolResult(out);
+      } catch (error) {
+        return errorToolResult(error, {
+          mode: 'data',
+          debug: {
+            api: 'v2',
+            filename: args.filename,
+            taskId: args.taskId,
+            jobNumber: args.jobNumber
+          }
         });
       }
     }

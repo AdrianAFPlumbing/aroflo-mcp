@@ -72,3 +72,59 @@ describe('v2 bridge', () => {
     expect(r).toEqual({ legacyTaskId: 'LEGACY==', taskId: '72M8000001' });
   });
 });
+
+describe('v2 task helpers', () => {
+  it('resolves a priority by short description', async () => {
+    const { resolvePriorityId } = await import('../../../src/aroflo/v2-tasks.js');
+    const v2 = {
+      get: async () => ({
+        httpStatus: 200,
+        headers: {},
+        data: {
+          items: [
+            {
+              id: 'P1',
+              shortDescription: 'UNSW - HIGH',
+              description: 'HIGH - Respond within 1 hour'
+            },
+            { id: 'P2', shortDescription: 'UNSW - LOW', description: 'LOW - Respond within 5 days' }
+          ],
+          page: { count: 1 }
+        }
+      })
+    };
+    await expect(resolvePriorityId(v2 as any, 'unsw - high')).resolves.toEqual({
+      id: 'P1',
+      label: 'UNSW - HIGH'
+    });
+    await expect(resolvePriorityId(v2 as any, 'UNSW')).rejects.toThrow(/ambiguous/);
+    await expect(resolvePriorityId(v2 as any, 'P2')).resolves.toEqual({
+      id: 'P2',
+      label: 'UNSW - LOW'
+    });
+  });
+
+  it('rejects an upload without a file extension and builds the v2 body', async () => {
+    const { uploadTaskDocument } = await import('../../../src/aroflo/v2-tasks.js');
+    const calls: unknown[] = [];
+    const v2 = {
+      post: async (path: string, body: unknown) => {
+        calls.push([path, body]);
+        return { httpStatus: 200, headers: {}, data: { id: 'D1' } };
+      }
+    };
+    await expect(
+      uploadTaskDocument(v2 as any, 'T1', { filename: 'noext', base64: 'QUJD' })
+    ).rejects.toThrow(/extension/);
+    const r = await uploadTaskDocument(v2 as any, 'T1', {
+      filename: 'wo.pdf',
+      base64: 'QUJD',
+      comment: 'from email'
+    });
+    expect(r.bytes).toBe(3);
+    expect(calls[0]).toEqual([
+      'tasks/T1/documents/upload',
+      { filename: 'wo.pdf', base64: 'QUJD', comment: 'from email' }
+    ]);
+  });
+});

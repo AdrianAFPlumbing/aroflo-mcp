@@ -198,8 +198,16 @@ Set `AROFLO_V2_TOKEN` (a Personal Access Token from Site Administration > Settin
 - `aroflo_v2_get_task` — `GET /v2/tasks/{taskId}` by v2 id **or job number**
 - `aroflo_v2_get_task_notes` — `GET /v2/tasks/{taskId}/notes` by v2 id or job number
 - `aroflo_v2_assign_task` — `PUT /v2/tasks/{taskId}/resources` (replaces the assignee set)
+- `aroflo_v2_update_task` — `PATCH /v2/tasks/{taskId}` (description, Cust ON, priority/substatus by name, status) by v2 id or job number
+- `aroflo_v2_upload_document` — `POST /v2/tasks/{taskId}/documents/upload` (base64; small files only)
 - `aroflo_v2_get` — read-only GET against any v2 path, for exploring endpoints while the schema is in beta
 - `aroflo_v2_convert_ids` — `POST /v2/idconversions`, maps legacy ids to v2 ids
+
+Webhooks for Power Automate (auth: `x-webhook-token` = `WEBHOOK_TOKEN`, falls back to `ANSTO_WEBHOOK_TOKEN`):
+
+- `POST /v2/tasks/{jobNumber}/documents` — `{ filename, contentBase64 | dataUrl, comment? }` or raw `application/octet-stream` with `?filename=`
+- `POST /v2/tasks/{jobNumber}/documents/batch` — `{ files: [ { filename, contentBase64 }, ... ] }` (one call per email)
+- `PATCH /v2/tasks/{jobNumber}` — `{ description?, customerOrderNumber?, priorityId?, subStatusId?, status? }`
 
 All tools accept `fields` (v2 `_fields`) to trim the response, e.g. `id,jobNumber,name,client[name]`.
 

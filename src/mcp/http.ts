@@ -10,6 +10,7 @@ import { handleTasksRest } from './rest.js';
 import { handleAiComplete } from './ai.js';
 import { handlePortal } from './portal.js';
 import { handleStatic } from './static.js';
+import { handleV2Webhooks } from './v2-webhooks.js';
 
 export interface HttpServerOptions {
   host: string;
@@ -19,12 +20,15 @@ export interface HttpServerOptions {
   v2Client?: AroFloV2Client;
 }
 
-const ALLOWED_METHODS = new Set(['POST', 'GET', 'DELETE']);
+const ALLOWED_METHODS = new Set(['POST', 'GET', 'DELETE', 'PATCH']);
 
 function setCorsHeaders(res: ServerResponse): void {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, GET, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'content-type, mcp-session-id, x-portal-token');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'content-type, mcp-session-id, x-portal-token, x-webhook-token'
+  );
 }
 
 function writeJson(res: ServerResponse, statusCode: number, payload: unknown): void {
@@ -71,6 +75,9 @@ export async function handleMcpHttpRequest(
 
   // --- Quote Portal DB API (auth, users, quotes, versions, prices, clients) -
   if (await handlePortal(req, res, pathname, client)) return;
+
+  // --- APIv2 webhooks for Power Automate (document upload, task PATCH) -----
+  if (await handleV2Webhooks(req, res, pathname, client, v2Client)) return;
 
   // --- Quote Portal REST endpoint -------------------------------------------
   // Plain REST route the browser portal can call directly (the /mcp route only
