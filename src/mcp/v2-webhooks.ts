@@ -104,7 +104,7 @@ interface FileInput {
 
 // /v2/tasks/<ref>... where <ref> is a 6-digit job number, a legacy taskid
 // (base64, often ending in "=") or a v2 task id (11 chars, starts "72M8").
-const ROUTE = /^\/v2\/tasks\/([^/]+?)(\/documents(\/batch)?)?\/?$/;
+const ROUTE = /^\/v2\/tasks\/([^/]*?)(\/documents(\/batch)?)?\/?$/;
 
 async function resolveTaskRef(
   legacy: AroFloClient,
@@ -154,6 +154,17 @@ export async function handleV2Webhooks(
     return true;
   }
 
+  // Power Automate calls this unconditionally after the Claude step; when Claude
+  // returned action=skip there is no taskid, so answer "nothing to do" rather
+  // than failing the run.
+  if (!taskRef.trim() || ['null', 'undefined', 'skip'].includes(taskRef.trim().toLowerCase())) {
+    writeJson(res, 200, {
+      status: 'skipped',
+      reason: 'No task reference supplied (nothing created)'
+    });
+    return true;
+  }
+
   try {
     const { taskId, legacyTaskId, jobNumber } = await resolveTaskRef(legacy, v2, taskRef);
 
@@ -177,13 +188,29 @@ export async function handleV2Webhooks(
         files = [{ filename, base64: raw.toString('base64') }];
       }
 
-      if (files.length === 0) {
-        writeJson(res, 400, { status: 'error', message: 'No files supplied' });
+      // Attachments the email import would not want on the job: inline
+      // signature images and calendar/vcard noise. Keep documents and photos.
+      const SKIP_NAME = /\.(ics|vcf|p7s|asc)$/i;
+      const wanted = files.filter((f) => {
+        const name = (f.filename ?? f.name ?? '').trim();
+        if (!name || SKIP_NAME.test(name)) return false;
+        if ((f as { isInline?: boolean }).isInline === true) return false;
+        return true;
+      });
+
+      if (wanted.length === 0) {
+        writeJson(res, 200, {
+          status: 'skipped',
+          reason:
+            files.length === 0 ? 'No attachments on the email' : 'Only inline/ignored attachments',
+          taskId,
+          jobNumber
+        });
         return true;
       }
 
       const results: Array<Record<string, unknown>> = [];
-      for (const f of files) {
+      for (const f of wanted) {
         const filename = (f.filename ?? f.name ?? '').trim();
         try {
           const { response, bytes } = await uploadTaskDocument(v2, taskId, {
