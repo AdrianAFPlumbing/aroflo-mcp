@@ -392,15 +392,15 @@ export function registerV2Tools(server: McpServer, v2: AroFloV2Client, legacy: A
         const { taskId, resolvedFrom } = await resolveTaskId(legacy, v2, args);
         const resolved: Record<string, unknown> = {};
 
+        // Priorities and substatuses are linked to the task's owning business
+        // unit (not the client), so default the lookup scope to task.owner.
         let linkedOrgId = args.linkedOrgId;
         if (!linkedOrgId && (args.priority || args.substatus)) {
-          const t = await v2.get<{ client?: { id?: string } }>(
+          const t = await v2.get<{ owner?: { id?: string } }>(
             `tasks/${encodeURIComponent(taskId)}`,
-            {
-              _fields: 'client[id]'
-            }
+            { _fields: 'owner[id]' }
           );
-          linkedOrgId = t.data?.client?.id;
+          linkedOrgId = t.data?.owner?.id;
         }
 
         let priorityId: string | undefined;
