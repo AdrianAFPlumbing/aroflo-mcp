@@ -105,32 +105,95 @@ export async function handleMcpHttpRequest(
   // POST /ansto/sweep?dryRun=1   -> process every unmatched ANSTO PO import
   // POST /ansto/po/<jobnumber>   -> process one AroFlo task that has a PO PDF
   // POST /ansto/backfill-pdfs     -> body {items:[{jobnumber, po}]} attach PO PDFs
-  // Protected by ANSTO_WEBHOOK_TOKEN (header x-ansto-token or ?token=).
+  // POST /ansto/po-email          -> body {files:[{name, contentBytes}]} (Power Automate):
+  //                                  the SAP PO email's attachments; pairs each 4300xxxxxx.pdf
+  //                                  with its Work Order job (Order No + document) or raises
+  //                                  the job. The SAP sender is NOT in AroFlo's import filter,
+  //                                  so no duplicate task is ever created.
+  // Protected by WEBHOOK_TOKEN / ANSTO_WEBHOOK_TOKEN (x-webhook-token / x-ansto-token / ?token=).
   if (
     pathname === '/ansto/sweep' ||
     pathname === '/ansto/backfill-pdfs' ||
+    pathname === '/ansto/po-email' ||
     /^\/ansto\/po\/\d{6}$/.test(pathname)
   ) {
     if (req.method !== 'POST') {
       writeJson(res, 405, { status: 'error', message: 'Method not allowed' });
       return;
     }
-    const expected = process.env['ANSTO_WEBHOOK_TOKEN']?.trim();
+    const expected = (process.env['WEBHOOK_TOKEN'] ?? process.env['ANSTO_WEBHOOK_TOKEN'])?.trim();
     const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
     const supplied =
-      (req.headers['x-ansto-token'] as string | undefined) ?? url.searchParams.get('token') ?? '';
+      (req.headers['x-webhook-token'] as string | undefined) ??
+      (req.headers['x-ansto-token'] as string | undefined) ??
+      url.searchParams.get('token') ??
+      '';
     if (!expected || supplied !== expected) {
       writeJson(res, 401, { status: 'error', message: 'Unauthorised' });
       return;
     }
     try {
-      const { sweepPoTasks, processPoTask, getTaskByJobNumber } =
+      const { sweepPoTasks, processPoTask, processPoBytes, getTaskByJobNumber } =
         await import('../aroflo/ansto-po.js');
       const dryRun = ['1', 'true'].includes((url.searchParams.get('dryRun') ?? '').toLowerCase());
       if (pathname === '/ansto/sweep') {
         writeJson(res, 200, {
           status: 'ok',
           ...(await sweepPoTasks(client, { dryRun, v2: v2Client }))
+        });
+        return;
+      }
+      if (pathname === '/ansto/po-email') {
+        const chunks: Buffer[] = [];
+        for await (const c of req) chunks.push(c as Buffer);
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') as {
+          files?: {
+            name?: string;
+            filename?: string;
+            contentBytes?: string;
+            contentBase64?: string;
+          }[];
+          subject?: string;
+        };
+        const pdfs = (body.files ?? []).filter((f) =>
+          /^4300\d{6}\.pdf$/i.test((f.name ?? f.filename ?? '').trim())
+        );
+        if (pdfs.length === 0) {
+          writeJson(res, 200, {
+            status: 'skipped',
+            reason: 'No 4300xxxxxx.pdf attachment on this email',
+            subject: body.subject
+          });
+          return;
+        }
+        const results = [];
+        for (const f of pdfs) {
+          const name = (f.name ?? f.filename ?? '').trim();
+          const b64 = f.contentBytes ?? f.contentBase64 ?? '';
+          try {
+            results.push({
+              file: name,
+              ...(await processPoBytes(client, new Uint8Array(Buffer.from(b64, 'base64')), name, {
+                dryRun,
+                v2: v2Client
+              }))
+            });
+          } catch (error) {
+            logger.error({ err: error, file: name }, 'ANSTO PO email: processing failed');
+            results.push({
+              file: name,
+              outcome: 'error',
+              note: error instanceof Error ? error.message : String(error)
+            });
+          }
+        }
+        const failed = results.filter(
+          (r) => r.outcome === 'error' || r.outcome === 'wo-not-readable'
+        );
+        writeJson(res, failed.length === results.length ? 502 : 200, {
+          status: failed.length ? 'partial' : 'ok',
+          subject: body.subject,
+          results
         });
         return;
       }

@@ -489,6 +489,34 @@ export async function processPoText(
   return applyParsedPo(client, po, po.orderNo, options);
 }
 
+/**
+ * Process the PO PDF straight from the email (no AroFlo import task). This is
+ * the preferred path: the SAP PO sender is NOT in AroFlo's import filter, so
+ * no duplicate task is ever created. Pairs with the Work Order job (Order No
+ * -> custom field, PDF -> job documents) or raises the job if none exists.
+ */
+export async function processPoBytes(
+  client: AroFloClient,
+  bytes: Uint8Array,
+  fileName: string | undefined,
+  options: ProcessOptions = {}
+): Promise<PoResult> {
+  const text = await extractPdfText(bytes);
+  const po = parseAnstoPoText(text);
+  const fromName = /^(4300\d{6})\.pdf$/i.exec((fileName ?? '').trim())?.[1];
+  const orderNo = po.orderNo ?? fromName;
+  if (!orderNo) {
+    return {
+      outcome: 'wo-not-readable',
+      note: 'No 4300xxxxxx Order No found in PDF text or filename'
+    };
+  }
+  return applyParsedPo(client, po, orderNo, {
+    ...options,
+    pdf: { fileName: `${orderNo}.pdf`, bytes }
+  });
+}
+
 async function applyParsedPo(
   client: AroFloClient,
   po: ParsedAnstoPo,
@@ -637,15 +665,31 @@ async function applyParsedPo(
     if (first) jobnumber = str(first['jobnumber']) || undefined;
   }
   logger.info({ orderNo, workOrderNo: po.workOrderNo, jobnumber }, 'ANSTO PO created as new job');
+  let createdPdfNote: string | undefined;
+  if (jobnumber && options.v2 && options.pdf) {
+    try {
+      const { attachPdfToJob } = await import('./ansto-po-pdf.js');
+      const r = await attachPdfToJob(client, options.v2, { jobnumber }, options.pdf);
+      createdPdfNote = `PDF ${r.outcome}${r.error ? `: ${r.error}` : ''}`;
+    } catch (error) {
+      createdPdfNote = `PDF attach error: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  }
   return {
     outcome: 'created-primary',
     jobnumber,
     orderNo,
     workOrderNo: po.workOrderNo,
     taskName,
-    note: jobnumber
-      ? undefined
-      : `Inserted (inserttotal=${str(pr['inserttotal'])}); job number not returned`
+    note:
+      [
+        jobnumber
+          ? undefined
+          : `Inserted (inserttotal=${str(pr['inserttotal'])}); job number not returned`,
+        createdPdfNote
+      ]
+        .filter(Boolean)
+        .join('; ') || undefined
   };
 }
 
