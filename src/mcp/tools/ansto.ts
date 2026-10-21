@@ -9,9 +9,15 @@ import {
   processPoText,
   sweepPoTasks
 } from '../../aroflo/ansto-po.js';
+import type { AroFloV2Client } from '../../aroflo/v2-client.js';
+import { attachPdfToJob, backfillPoPdfs } from '../../aroflo/ansto-po-pdf.js';
 import { errorToolResult, successToolResult } from './shared.js';
 
-export function registerAnstoTools(server: McpServer, client: AroFloClient): void {
+export function registerAnstoTools(
+  server: McpServer,
+  client: AroFloClient,
+  v2Client?: AroFloV2Client
+): void {
   server.registerTool(
     'aroflo_ansto_process_po',
     {
@@ -38,11 +44,13 @@ export function registerAnstoTools(server: McpServer, client: AroFloClient): voi
           if (!task) {
             return successToolResult({ outcome: 'not-found', jobnumber: args.jobnumber });
           }
-          return successToolResult(await processPoTask(client, task, { dryRun: args.dryRun }));
+          return successToolResult(
+            await processPoTask(client, task, { dryRun: args.dryRun, v2: v2Client })
+          );
         }
         if (args.poText) {
           return successToolResult(
-            await processPoText(client, args.poText, { dryRun: args.dryRun })
+            await processPoText(client, args.poText, { dryRun: args.dryRun, v2: v2Client })
           );
         }
         return successToolResult({ outcome: 'error', note: 'Provide jobnumber or poText' });
@@ -68,7 +76,7 @@ export function registerAnstoTools(server: McpServer, client: AroFloClient): voi
     async (args) => {
       try {
         return successToolResult(
-          await sweepPoTasks(client, { dryRun: args.dryRun, pages: args.pages })
+          await sweepPoTasks(client, { dryRun: args.dryRun, pages: args.pages, v2: v2Client })
         );
       } catch (error) {
         return errorToolResult(error);
@@ -87,5 +95,73 @@ export function registerAnstoTools(server: McpServer, client: AroFloClient): voi
       annotations: { readOnlyHint: true }
     },
     async (args) => successToolResult(parseAnstoPoText(args.poText))
+  );
+
+  if (!v2Client) return;
+
+  server.registerTool(
+    'aroflo_ansto_backfill_po_pdfs',
+    {
+      title: 'AroFlo: Attach ANSTO PO PDFs to jobs',
+      description:
+        'For each {jobnumber, po}: finds the PO PDF (4300xxxxxx.pdf) on any recent ANSTO task in AroFlo and attaches it to the job if not already attached (APIv2 upload, verified). PDFs that only exist in email return pdf-not-in-aroflo - attach those with aroflo_ansto_attach_pdf.',
+      inputSchema: {
+        items: z
+          .array(
+            z.object({
+              jobnumber: z.string().regex(/^\d{6}$/),
+              po: z.string().regex(/^4300\d{6}$/)
+            })
+          )
+          .min(1)
+          .max(100)
+      },
+      outputSchema: z.object({}).passthrough(),
+      annotations: { destructiveHint: false, openWorldHint: true }
+    },
+    async (args) => {
+      try {
+        const results = await backfillPoPdfs(client, v2Client, args.items);
+        const counts: Record<string, number> = {};
+        for (const r of results) counts[r.outcome] = (counts[r.outcome] ?? 0) + 1;
+        return successToolResult({ counts, results });
+      } catch (error) {
+        return errorToolResult(error);
+      }
+    }
+  );
+
+  server.registerTool(
+    'aroflo_ansto_attach_pdf',
+    {
+      title: 'AroFlo: Attach a PDF to a job',
+      description:
+        'Uploads a PDF (base64) to an AroFlo job via APIv2, skipping it if a file with the same name is already attached. Use for ANSTO PO PDFs taken from the email when the PDF is not in AroFlo.',
+      inputSchema: {
+        jobnumber: z.string().regex(/^\d{6}$/),
+        fileName: z.string().min(5),
+        pdfBase64: z.string().min(100)
+      },
+      outputSchema: z.object({}).passthrough(),
+      annotations: { destructiveHint: false, openWorldHint: true }
+    },
+    async (args) => {
+      try {
+        const bytes = new Uint8Array(Buffer.from(args.pdfBase64, 'base64'));
+        return successToolResult(
+          await attachPdfToJob(
+            client,
+            v2Client,
+            { jobnumber: args.jobnumber },
+            {
+              fileName: args.fileName,
+              bytes
+            }
+          )
+        );
+      } catch (error) {
+        return errorToolResult(error);
+      }
+    }
   );
 }

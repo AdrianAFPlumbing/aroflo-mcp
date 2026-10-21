@@ -21,6 +21,7 @@
 import { fetch } from 'undici';
 
 import type { AroFloClient } from './client.js';
+import type { AroFloV2Client } from './v2-client.js';
 import { extractZoneItems } from './items.js';
 import { logger } from '../utils/logger.js';
 
@@ -437,6 +438,8 @@ export interface PoResult {
 
 export interface ProcessOptions {
   dryRun?: boolean;
+  /** APIv2 client - when present the PO PDF is also copied onto the job it is paired with. */
+  v2?: AroFloV2Client;
   /** Pre-fetched ANSTO task list to avoid re-pulling for every task in a sweep. */
   knownTasks?: AnstoTaskLite[];
 }
@@ -463,7 +466,11 @@ export async function processPoTask(
   const po = parseAnstoPoText(text);
   const orderNo = po.orderNo ?? pdf.name.replace(/\.pdf$/i, '');
 
-  return applyParsedPo(client, po, orderNo, { ...options, importTask: task });
+  return applyParsedPo(client, po, orderNo, {
+    ...options,
+    importTask: task,
+    pdf: { fileName: `${orderNo}.pdf`, bytes }
+  });
 }
 
 /**
@@ -486,7 +493,10 @@ async function applyParsedPo(
   client: AroFloClient,
   po: ParsedAnstoPo,
   orderNo: string,
-  options: ProcessOptions & { importTask?: AnstoTaskLite }
+  options: ProcessOptions & {
+    importTask?: AnstoTaskLite;
+    pdf?: { fileName: string; bytes: Uint8Array };
+  }
 ): Promise<PoResult> {
   const importTask = options.importTask;
 
@@ -537,7 +547,23 @@ async function applyParsedPo(
       },
       'ANSTO PO paired with existing task'
     );
+    let pdfNote: string | undefined;
+    if (options.v2 && options.pdf) {
+      try {
+        const { attachPdfToJob } = await import('./ansto-po-pdf.js');
+        const r = await attachPdfToJob(
+          client,
+          options.v2,
+          { jobnumber: primary.jobnumber, legacyTaskId: primary.taskid },
+          options.pdf
+        );
+        pdfNote = `PDF ${r.outcome}${r.error ? `: ${r.error}` : ''}`;
+      } catch (error) {
+        pdfNote = `PDF attach error: ${error instanceof Error ? error.message : String(error)}`;
+      }
+    }
     return {
+      note: pdfNote,
       outcome: 'paired-with-existing',
       jobnumber: importTask?.jobnumber,
       orderNo,
@@ -628,7 +654,7 @@ async function applyParsedPo(
  */
 export async function sweepPoTasks(
   client: AroFloClient,
-  options: { dryRun?: boolean; pages?: number } = {}
+  options: { dryRun?: boolean; pages?: number; v2?: AroFloV2Client } = {}
 ): Promise<{ checked: number; candidates: number; results: PoResult[] }> {
   const tasks = await listRecentAnstoTasks(client, {
     pages: options.pages ?? 2,
@@ -640,7 +666,11 @@ export async function sweepPoTasks(
   for (const task of candidates) {
     try {
       results.push(
-        await processPoTask(client, task, { dryRun: options.dryRun, knownTasks: tasks })
+        await processPoTask(client, task, {
+          dryRun: options.dryRun,
+          knownTasks: tasks,
+          v2: options.v2
+        })
       );
     } catch (error) {
       results.push({

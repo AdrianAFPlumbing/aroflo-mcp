@@ -122,6 +122,49 @@ export class AroFloV2Client {
     return this.request<T>('PATCH', path, { body, query });
   }
 
+  /**
+   * multipart/form-data upload (e.g. POST tasks/{id}/documents). Not retried:
+   * an upload that timed out may still have landed, and a retry would duplicate it.
+   */
+  async uploadFile(
+    path: string,
+    file: { fieldName?: string; fileName: string; contentType: string; bytes: Uint8Array },
+    fields: Record<string, string> = {}
+  ): Promise<AroFloV2Response> {
+    const { FormData } = await import('undici');
+    const form = new FormData();
+    for (const [k, v] of Object.entries(fields)) form.append(k, v);
+    form.append(
+      file.fieldName ?? 'file',
+      new Blob([new Uint8Array(file.bytes)], { type: file.contentType }),
+      file.fileName
+    );
+    const url = buildV2Url(this.baseUrl, path);
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+        Accept: 'application/json',
+        'X-Correlation-ID': randomUUID()
+      },
+      body: form,
+      signal: AbortSignal.timeout(this.timeoutMs)
+    });
+    const raw = await response.text();
+    let data: unknown = raw;
+    try {
+      data = raw.trim() ? JSON.parse(raw) : null;
+    } catch {
+      /* keep raw text */
+    }
+    const headers: Record<string, string> = {};
+    for (const [k, v] of response.headers.entries()) headers[k] = v;
+    if (response.status >= 400) {
+      this.throwFromStatus(response.status, data);
+    }
+    return { httpStatus: response.status, headers, data };
+  }
+
   async delete<T = unknown>(
     path: string,
     query?: Record<string, V2QueryValue>

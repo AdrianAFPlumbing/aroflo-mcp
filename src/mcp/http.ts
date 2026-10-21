@@ -97,8 +97,13 @@ export async function handleMcpHttpRequest(
   // --- ANSTO SAP PO webhook / sweep -----------------------------------------
   // POST /ansto/sweep?dryRun=1   -> process every unmatched ANSTO PO import
   // POST /ansto/po/<jobnumber>   -> process one AroFlo task that has a PO PDF
+  // POST /ansto/backfill-pdfs     -> body {items:[{jobnumber, po}]} attach PO PDFs
   // Protected by ANSTO_WEBHOOK_TOKEN (header x-ansto-token or ?token=).
-  if (pathname === '/ansto/sweep' || /^\/ansto\/po\/\d{6}$/.test(pathname)) {
+  if (
+    pathname === '/ansto/sweep' ||
+    pathname === '/ansto/backfill-pdfs' ||
+    /^\/ansto\/po\/\d{6}$/.test(pathname)
+  ) {
     if (req.method !== 'POST') {
       writeJson(res, 405, { status: 'error', message: 'Method not allowed' });
       return;
@@ -116,7 +121,30 @@ export async function handleMcpHttpRequest(
         await import('../aroflo/ansto-po.js');
       const dryRun = ['1', 'true'].includes((url.searchParams.get('dryRun') ?? '').toLowerCase());
       if (pathname === '/ansto/sweep') {
-        writeJson(res, 200, { status: 'ok', ...(await sweepPoTasks(client, { dryRun })) });
+        writeJson(res, 200, {
+          status: 'ok',
+          ...(await sweepPoTasks(client, { dryRun, v2: v2Client }))
+        });
+        return;
+      }
+      if (pathname === '/ansto/backfill-pdfs') {
+        if (!v2Client) {
+          writeJson(res, 400, { status: 'error', message: 'AROFLO_V2_TOKEN not set' });
+          return;
+        }
+        const chunks: Buffer[] = [];
+        for await (const c of req) chunks.push(c as Buffer);
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') as {
+          items?: { jobnumber: string; po: string }[];
+        };
+        const items = (body.items ?? []).filter(
+          (i) => /^\d{6}$/.test(String(i.jobnumber)) && /^4300\d{6}$/.test(String(i.po))
+        );
+        const { backfillPoPdfs } = await import('../aroflo/ansto-po-pdf.js');
+        writeJson(res, 200, {
+          status: 'ok',
+          results: await backfillPoPdfs(client, v2Client, items.slice(0, 100))
+        });
         return;
       }
       const jobnumber = pathname.split('/').pop()!;
@@ -125,7 +153,10 @@ export async function handleMcpHttpRequest(
         writeJson(res, 404, { status: 'error', message: `Job ${jobnumber} not found` });
         return;
       }
-      writeJson(res, 200, { status: 'ok', ...(await processPoTask(client, task, { dryRun })) });
+      writeJson(res, 200, {
+        status: 'ok',
+        ...(await processPoTask(client, task, { dryRun, v2: v2Client }))
+      });
     } catch (error) {
       logger.error({ err: error }, 'Failed to handle /ansto request');
       writeJson(res, 500, {

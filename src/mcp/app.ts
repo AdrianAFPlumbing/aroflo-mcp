@@ -58,7 +58,7 @@ export function createAroFloMcpServer(client: AroFloClient, v2Client?: AroFloV2C
   registerMutateRecordTool(server, client);
   registerZoneGetTools(server, client);
   registerReportTools(server, client);
-  registerAnstoTools(server, client);
+  registerAnstoTools(server, client, v2Client);
   if (v2Client) {
     registerV2Tools(server, v2Client, client);
   }
