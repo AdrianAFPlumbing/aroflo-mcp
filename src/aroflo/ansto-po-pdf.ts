@@ -9,6 +9,7 @@
 import type { AroFloClient } from './client.js';
 import type { AroFloV2Client } from './v2-client.js';
 import { convertLegacyIds, v2TaskIdForJobNumber } from './v2-bridge.js';
+import { uploadTaskDocument } from './v2-tasks.js';
 import { downloadBytes, listRecentAnstoTasks, type AnstoTaskLite } from './ansto-po.js';
 import { logger } from '../utils/logger.js';
 
@@ -72,36 +73,16 @@ export async function attachPdfToJob(
     return { outcome: 'already-attached', jobnumber: target.jobnumber, fileName: file.fileName };
   }
 
-  const path = `tasks/${v2TaskId}/documents`;
+  // Documented APIv2 upload: POST tasks/{id}/documents/upload with a JSON
+  // { filename, base64 } body (see docs.api.aroflo.com, tasks-upload-document).
   const attempts: { label: string; run: () => Promise<unknown> }[] = [
     {
-      label: 'multipart:file',
+      label: 'json:documents/upload',
       run: () =>
-        v2.uploadFile(path, {
-          fieldName: 'file',
-          fileName: file.fileName,
-          contentType: 'application/pdf',
-          bytes: file.bytes
-        })
-    },
-    {
-      label: 'multipart:document',
-      run: () =>
-        v2.uploadFile(path, {
-          fieldName: 'document',
-          fileName: file.fileName,
-          contentType: 'application/pdf',
-          bytes: file.bytes
-        })
-    },
-    {
-      label: 'json:base64',
-      run: () =>
-        v2.post(path, {
-          fileName: file.fileName,
-          name: file.fileName.replace(/\.pdf$/i, ''),
-          contentType: 'application/pdf',
-          content: Buffer.from(file.bytes).toString('base64')
+        uploadTaskDocument(v2, v2TaskId, {
+          filename: file.fileName,
+          base64: Buffer.from(file.bytes).toString('base64'),
+          comment: 'ANSTO SAP purchase order'
         })
     }
   ];
