@@ -12,6 +12,7 @@ import { registerZoneGetTools } from './tools/get-zones.js';
 import { registerReportTools } from './tools/reports.js';
 import { registerV2Tools } from './tools/v2.js';
 import { registerAnstoTools } from './tools/ansto.js';
+import { registerClientMatchTools } from './tools/client-match.js';
 import { AroFloV2Client } from '../aroflo/v2-client.js';
 
 /**

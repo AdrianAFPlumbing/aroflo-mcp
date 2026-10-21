@@ -1,6 +1,6 @@
 {
   "name": "aroflo-mcp",
-  "version": "0.4.4",
+  "version": "0.5.0",
   "description": "Standalone production-ready MCP server for the AroFlo API",
   "type": "module",
   "main": "dist/index.js",
