@@ -1,10 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import type { AroFloClient } from '../aroflo/client.js';
-import { v2TaskIdForJobNumber } from '../aroflo/v2-bridge.js';
+import { convertLegacyIds, v2TaskIdForJobNumber } from '../aroflo/v2-bridge.js';
 import type { AroFloV2Client } from '../aroflo/v2-client.js';
 import { patchTask, uploadTaskDocument, type TaskPatch } from '../aroflo/v2-tasks.js';
-import { AroFloError } from '../utils/errors.js';
+import { AroFloApiError, AroFloError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -17,9 +17,11 @@ import { logger } from '../utils/logger.js';
  *     or:   { "filename": "...", "dataUrl": "data:application/pdf;base64,..." }
  *     or:   raw bytes with Content-Type: application/octet-stream and ?filename=...
  *
- *   POST /v2/tasks/<jobnumber>/documents/batch
+ *   POST /v2/tasks/<ref>/documents/batch
  *     JSON: { "files": [ { "filename", "contentBase64" | "dataUrl", "comment"? }, ... ] }
- *     (one call per email — Power Automate can pass the whole attachments array)
+ *     The Outlook trigger's attachment objects ({ name, contentBytes, ... }) are
+ *     accepted directly, so Power Automate can pass the whole attachments array.
+ *   <ref> may be a 6-digit job number, a legacy taskid or a v2 task id.
  *
  *   PATCH /v2/tasks/<jobnumber>
  *     JSON: { description?, customerOrderNumber?, priorityId?, subStatusId?, status?, clearPriority?, clearSubstatus? }
@@ -89,6 +91,9 @@ function authorised(req: IncomingMessage): boolean {
 
 interface FileInput {
   filename?: string;
+  /** Outlook trigger attachment shape (name/contentBytes) is accepted as-is. */
+  name?: string;
+  contentBytes?: string;
   contentBase64?: string;
   base64?: string;
   dataUrl?: string;
@@ -97,7 +102,28 @@ interface FileInput {
   categoryId?: string;
 }
 
-const ROUTE = /^\/v2\/tasks\/(\d{6})(\/documents(\/batch)?)?\/?$/;
+// /v2/tasks/<ref>... where <ref> is a 6-digit job number, a legacy taskid
+// (base64, often ending in "=") or a v2 task id (11 chars, starts "72M8").
+const ROUTE = /^\/v2\/tasks\/([^/]+?)(\/documents(\/batch)?)?\/?$/;
+
+async function resolveTaskRef(
+  legacy: AroFloClient,
+  v2: AroFloV2Client,
+  ref: string
+): Promise<{ taskId: string; legacyTaskId?: string; jobNumber?: number }> {
+  const decoded = decodeURIComponent(ref);
+  if (/^\d{6}$/.test(decoded)) {
+    const r = await v2TaskIdForJobNumber(legacy, v2, Number(decoded));
+    return { ...r, jobNumber: Number(decoded) };
+  }
+  if (/^[A-Za-z0-9+/]+=*$/.test(decoded) && decoded.includes('=')) {
+    const [conv] = await convertLegacyIds(v2, [decoded]);
+    if (!conv?.id)
+      throw new AroFloApiError(`Could not convert legacy task id ${decoded}`, { statusCode: 400 });
+    return { taskId: conv.id, legacyTaskId: decoded };
+  }
+  return { taskId: decoded };
+}
 
 /**
  * Returns true when the request was handled (even if with an error response).
@@ -112,7 +138,7 @@ export async function handleV2Webhooks(
   const match = ROUTE.exec(pathname);
   if (!match) return false;
 
-  const jobNumber = Number(match[1]);
+  const taskRef = match[1]!;
   const isDocuments = Boolean(match[2]);
   const isBatch = Boolean(match[3]);
 
@@ -129,7 +155,7 @@ export async function handleV2Webhooks(
   }
 
   try {
-    const { taskId, legacyTaskId } = await v2TaskIdForJobNumber(legacy, v2, jobNumber);
+    const { taskId, legacyTaskId, jobNumber } = await resolveTaskRef(legacy, v2, taskRef);
 
     if (isDocuments) {
       if (req.method !== 'POST') {
@@ -158,11 +184,11 @@ export async function handleV2Webhooks(
 
       const results: Array<Record<string, unknown>> = [];
       for (const f of files) {
-        const filename = (f.filename ?? '').trim();
+        const filename = (f.filename ?? f.name ?? '').trim();
         try {
           const { response, bytes } = await uploadTaskDocument(v2, taskId, {
             filename,
-            base64: f.contentBase64 ?? f.base64,
+            base64: f.contentBase64 ?? f.contentBytes ?? f.base64,
             dataUrl: f.dataUrl,
             comment: f.comment,
             description: f.description,
@@ -200,7 +226,7 @@ export async function handleV2Webhooks(
     return true;
   } catch (error) {
     const { code, body } = errorPayload(error);
-    logger.error({ jobNumber, pathname, err: error }, 'v2 webhook failed');
+    logger.error({ taskRef, pathname, err: error }, 'v2 webhook failed');
     writeJson(res, code, body);
     return true;
   }
