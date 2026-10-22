@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { dbConfigured, query } from '../../db/db.js';
 import { PORTAL_KEYS, PORTAL_LABEL, PORTAL_SKILL, type PortalKey } from '../../kpi/rules.js';
-import { audit } from '../../kpi/store.js';
+import { applyPortalBaseline, audit } from '../../kpi/store.js';
 import { formatSydney } from '../../kpi/time.js';
 import { errorToolResult, successToolResult } from './shared.js';
 
@@ -97,33 +97,7 @@ export function registerCloseoffTools(server: McpServer): void {
     },
     async (args) => {
       try {
-        const refs = args.openRefs.map((r) => r.trim().toUpperCase()).filter(Boolean);
-        const where = `portal = $1 AND first_completed_at IS NOT NULL AND COALESCE(portal_close_value,'') = ''
-             AND COALESCE(TRIM(custon),'') <> ''
-             AND NOT EXISTS (SELECT 1 FROM unnest($2::text[]) r WHERE upper(custon) LIKE '%' || r || '%')`;
-        const toClose = await query<any>(`SELECT job_no, custon FROM kpi_jobs WHERE ${where} ORDER BY job_no`, [args.portal, refs]);
-        const stillOpen = await query<any>(
-          `SELECT job_no, custon FROM kpi_jobs WHERE portal = $1 AND first_completed_at IS NOT NULL
-              AND EXISTS (SELECT 1 FROM unnest($2::text[]) r WHERE upper(custon) LIKE '%' || r || '%') ORDER BY job_no`,
-          [args.portal, refs]
-        );
-        const noRef = await query<any>(
-          `SELECT job_no FROM kpi_jobs WHERE portal = $1 AND first_completed_at IS NOT NULL AND COALESCE(portal_close_value,'') = ''
-              AND COALESCE(TRIM(custon),'') = ''`,
-          [args.portal]
-        );
-        if (!args.dryRun) {
-          await query(`UPDATE kpi_jobs SET portal_close_value = $3, portal_close_date = $4 WHERE ${where}`,
-            [args.portal, refs, 'CLOSED PER PORTAL EXPORT', args.exportDate]);
-          await audit(null, 'portal_baseline', { portal: args.portal, exportDate: args.exportDate, openRefs: refs.length, markedClosed: toClose.length }, 'Portal export import');
-        }
-        return successToolResult({
-          portal: args.portal,
-          dryRun: Boolean(args.dryRun),
-          markedClosed: toClose.length,
-          awaitingCloseOff: stillOpen.map((r) => `${r.job_no} (${r.custon})`),
-          completedWithNoClientRef: noRef.map((r) => r.job_no)
-        });
+        return successToolResult({ ...(await applyPortalBaseline(args.portal, args.openRefs, args.exportDate, Boolean(args.dryRun), 'Portal export import')) });
       } catch (error) {
         return errorToolResult(error, { mode: 'data', debug: { tool: 'afp_portal_baseline' } });
       }

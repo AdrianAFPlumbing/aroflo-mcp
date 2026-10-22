@@ -226,7 +226,7 @@ function renderTiles() {
 function renderTabs() {
   const c = counts();
   const tabs = [['action', 'Needs action', c.action, true], ['open', 'All open'], ['closed', 'Recently closed'], ['queue', 'Close-off queue', c.queue], ['gaps', 'Data gaps', c.gaps, true], ['rules', 'KPI rules']];
-  if (data.user.isAdmin) tabs.push(['users', 'Users']);
+  if (data.user.isAdmin) tabs.push(['exports', 'Portal exports'], ['users', 'Users']);
   $('#tabs').innerHTML = tabs.map(([k, l, n, r]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}${n !== undefined ? `<span class="n ${r && n ? 'r' : ''}">${n}</span>` : ''}</button>`).join('');
 }
 
@@ -316,6 +316,8 @@ function render() {
     renderRules(p);
   } else if (tab === 'users') {
     renderUsers(p);
+  } else if (tab === 'exports') {
+    renderExports(p);
   }
 }
 const PORTAL_NAMES = { uos: 'UOS Archibus', unsw: 'UNSW Archibus', mywork_ausgrid: 'Downer Mywork (Ausgrid/Asahi)', mywork_defence: 'Downer Mywork (Defence)', mywork_stockland: 'Downer Mywork (Stockland)', bsafe: 'BGIS BSAFE', knightfrank: 'Knight Frank FRC', shp: 'Stanton Hillier Parker MyBuildings' };
@@ -336,6 +338,69 @@ function renderRules(p) {
     <td data-l="Notes"><input type="text" value="${esc(r.notes)}" data-f="notes" ${dis}><div class="sub">${esc(r.updatedBy || '')} ${fd(r.updatedAt)}</div></td>
     <td>${admin ? '<button data-saverule>Save</button>' : ''}</td></tr>`).join('')}</tbody></table>`;
 }
+
+// ---------- portal exports (admin) ----------
+// Each portal export lists every order still OPEN in that portal. Loading it marks completed
+// jobs that are not in the list as already closed in the portal, so the "ready to close off"
+// list only shows real work.
+const exp = { refs: [], files: [], portals: new Set(), result: null, busy: false };
+function loadSheetJs() {
+  if (window.XLSX) return Promise.resolve();
+  return new Promise((ok, bad) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; s.onload = ok; s.onerror = () => bad(new Error('Could not load the spreadsheet reader')); document.head.appendChild(s); });
+}
+async function readExports(files) {
+  await loadSheetJs();
+  const refs = new Set(); const hint = new Set();
+  for (const f of files) {
+    const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' });
+    for (const name of wb.SheetNames) {
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: false, defval: '' });
+      for (const row of rows) for (const cell of row) {
+        const v = String(cell).toUpperCase();
+        for (const m of v.matchAll(/\b(W\d{6,10}|\d{6,12})\b/g)) refs.add(m[1]);
+        if (/^PDEF$/.test(v)) hint.add('mywork_defence'); if (/^STK$/.test(v)) hint.add('mywork_stockland');
+        if (/^(AUSGD|ASAHI)$/.test(v)) hint.add('mywork_ausgrid'); if (/^FRC REF/.test(v)) hint.add('knightfrank');
+      }
+    }
+  }
+  return { refs: [...refs], hint };
+}
+function renderExports(p) {
+  const today = new Intl.DateTimeFormat('en-AU', { timeZone: 'Australia/Sydney', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date());
+  const r = exp.result;
+  p.innerHTML = `<p class="hint">Export the list of <b>open / issued</b> orders from a client portal and load it here. Completed AroFlo jobs that are not in the export are recorded as already closed in that portal. Only tick portals whose <b>full</b> open list is in the file.</p>
+    <div class="bar"><input type="file" id="expFiles" multiple accept=".xlsx,.xls,.csv"><span class="sub">${exp.files.length ? esc(exp.files.join(', ')) + ' · ' + exp.refs.length + ' order numbers found' : ''}</span></div>
+    <div class="bar">${Object.entries(PORTAL_NAMES).map(([k, l]) => `<label style="display:inline-flex;gap:5px;align-items:center;margin:0 10px 0 0;color:var(--ink);font-size:13px"><input type="checkbox" data-expportal="${k}" ${exp.portals.has(k) ? 'checked' : ''}> ${esc(l)}</label>`).join('')}</div>
+    <div class="bar"><label style="margin:0;color:var(--ink)">Export date <input type="text" id="expDate" value="${esc(exp.date || today)}" style="width:110px"></label>
+      <button id="expPreview" ${exp.refs.length && exp.portals.size && !exp.busy ? '' : 'disabled'}>Preview</button>
+      <button class="primary" id="expApply" ${r && r.dryRun && !exp.busy ? '' : 'disabled'}>Apply</button></div>
+    ${r ? `<h2>${r.dryRun ? 'Preview - nothing changed yet' : 'Applied'}</h2><table><thead><tr><th>Portal</th><th>${r.dryRun ? 'Will be marked closed' : 'Marked closed'}</th><th>Still to close off</th><th>No client ref (left alone)</th></tr></thead><tbody>${r.results.map((x) => `<tr>
+      <td data-l="Portal">${esc(portalName(x.portal))}</td>
+      <td data-l="Closed">${x.markedClosed}${x.markedClosedJobs.length ? `<div class="sub">${esc(x.markedClosedJobs.slice(0, 40).join(', '))}${x.markedClosedJobs.length > 40 ? ' …' : ''}</div>` : ''}</td>
+      <td data-l="To close">${x.awaitingCloseOff.length}<div class="sub">${esc(x.awaitingCloseOff.join(', '))}</div></td>
+      <td data-l="No ref">${x.completedWithNoClientRef.length}<div class="sub">${esc(x.completedWithNoClientRef.join(', '))}</div></td></tr>`).join('')}</tbody></table>` : ''}`;
+}
+async function runBaseline(dryRun) {
+  exp.busy = true; exp.date = $('#expDate').value.trim(); render();
+  try {
+    const r = await api('kpi/baseline', { method: 'POST', body: JSON.stringify({ portals: [...exp.portals], openRefs: exp.refs, exportDate: exp.date, dryRun }) });
+    exp.result = { dryRun, results: r.results };
+    if (!dryRun) { toast('Portal export applied'); exp.busy = false; await load(); tab = 'exports'; }
+  } catch (err) { toast(err.message); }
+  exp.busy = false; render();
+}
+document.addEventListener('change', async (e) => {
+  if (e.target.id === 'expFiles') {
+    const files = [...e.target.files]; if (!files.length) return;
+    try { const r = await readExports(files); exp.refs = r.refs; exp.files = files.map((f) => f.name); exp.portals = new Set(r.hint); exp.result = null; render(); }
+    catch (err) { toast(err.message); }
+  }
+  if (e.target.dataset && e.target.dataset.expportal) { e.target.checked ? exp.portals.add(e.target.dataset.expportal) : exp.portals.delete(e.target.dataset.expportal); exp.result = null; render(); }
+});
+document.addEventListener('click', (e) => {
+  if (e.target.id === 'expPreview') runBaseline(true);
+  if (e.target.id === 'expApply') { if (confirm('Record the completed jobs listed as already closed in these portals?')) runBaseline(false); }
+});
 
 // ---------- users (admin) ----------
 let users = null;

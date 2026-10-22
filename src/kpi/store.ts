@@ -113,3 +113,53 @@ export async function loadRules(): Promise<(KpiRule & { id: number; updatedBy: s
 export async function audit(jobNo: string | null, action: string, detail: unknown, byName: string): Promise<void> {
   await query('INSERT INTO kpi_audit (job_no, action, detail, by_name) VALUES ($1,$2,$3,$4)', [jobNo, action, detail ?? {}, byName]);
 }
+
+export interface BaselineResult {
+  portal: string;
+  dryRun: boolean;
+  markedClosed: number;
+  markedClosedJobs: string[];
+  awaitingCloseOff: string[];
+  completedWithNoClientRef: string[];
+}
+
+/**
+ * A portal export lists every order still OPEN in that portal. Completed AroFlo jobs for the
+ * portal whose client reference is NOT in the list are recorded as already closed in the portal.
+ * Jobs with no client reference are never touched. Erring towards "still open" is the safe side.
+ */
+export async function applyPortalBaseline(
+  portal: string,
+  openRefs: string[],
+  exportDate: string,
+  dryRun: boolean,
+  byName: string
+): Promise<BaselineResult> {
+  const refs = [...new Set(openRefs.map((r) => String(r).trim().toUpperCase()).filter((r) => r.length >= 5))];
+  const where = `portal = $1 AND first_completed_at IS NOT NULL AND COALESCE(portal_close_value,'') = ''
+       AND COALESCE(TRIM(custon),'') <> ''
+       AND NOT EXISTS (SELECT 1 FROM unnest($2::text[]) r WHERE upper(custon) LIKE '%' || r || '%')`;
+  const toClose = await query<any>(`SELECT job_no, custon FROM kpi_jobs WHERE ${where} ORDER BY job_no`, [portal, refs]);
+  const stillOpen = await query<any>(
+    `SELECT job_no, custon FROM kpi_jobs WHERE portal = $1 AND first_completed_at IS NOT NULL AND COALESCE(portal_close_value,'') = ''
+        AND EXISTS (SELECT 1 FROM unnest($2::text[]) r WHERE upper(custon) LIKE '%' || r || '%') ORDER BY job_no`,
+    [portal, refs]
+  );
+  const noRef = await query<any>(
+    `SELECT job_no FROM kpi_jobs WHERE portal = $1 AND first_completed_at IS NOT NULL AND COALESCE(portal_close_value,'') = ''
+        AND COALESCE(TRIM(custon),'') = ''`,
+    [portal]
+  );
+  if (!dryRun) {
+    await query(`UPDATE kpi_jobs SET portal_close_value = $3, portal_close_date = $4 WHERE ${where}`, [portal, refs, 'CLOSED PER PORTAL EXPORT', exportDate]);
+    await audit(null, 'portal_baseline', { portal, exportDate, openRefs: refs.length, markedClosed: toClose.map((r) => r.job_no) }, byName);
+  }
+  return {
+    portal,
+    dryRun,
+    markedClosed: toClose.length,
+    markedClosedJobs: toClose.map((r) => `${r.job_no} (${r.custon})`),
+    awaitingCloseOff: stillOpen.map((r) => `${r.job_no} (${r.custon})`),
+    completedWithNoClientRef: noRef.map((r) => r.job_no)
+  };
+}

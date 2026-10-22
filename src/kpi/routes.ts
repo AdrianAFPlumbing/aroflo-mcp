@@ -3,8 +3,8 @@ import { randomUUID } from 'node:crypto';
 
 import type { AroFloClient } from '../aroflo/client.js';
 import { query } from '../db/db.js';
-import { computeKpi, pickRule, PORTAL_LABEL, type KpiRule, type LegResult, type PortalKey, type WindowUnit } from './rules.js';
-import { audit, loadRules } from './store.js';
+import { computeKpi, pickRule, PORTAL_KEYS, PORTAL_LABEL, type KpiRule, type LegResult, type PortalKey, type WindowUnit } from './rules.js';
+import { applyPortalBaseline, audit, loadRules } from './store.js';
 import { syncKpiOnce } from './sync.js';
 import { parseAroFloLocal } from './time.js';
 
@@ -238,6 +238,19 @@ export async function handleKpi(
       await audit(row.job_no, 'closeoff_cancelled', {}, user.name);
       return send(res, 200, { status: 'ok' });
     }
+  }
+
+  // ---- Portal export baseline (admin) ------------------------------------
+  if (sub === 'baseline' && method === 'POST') {
+    if (!user.is_admin) return send(res, 403, { status: 'error', message: 'Admin only' });
+    const b = await readBody(req);
+    const portals: string[] = (Array.isArray(b.portals) ? b.portals : []).filter((p: string) => PORTAL_KEYS.includes(p as PortalKey));
+    const refs: string[] = Array.isArray(b.openRefs) ? b.openRefs.map(String) : [];
+    if (!portals.length) return send(res, 400, { status: 'error', message: 'Pick at least one portal the export covers' });
+    if (refs.length < 1) return send(res, 400, { status: 'error', message: 'No order numbers found in the file' });
+    const results = [];
+    for (const p of portals) results.push(await applyPortalBaseline(p, refs, String(b.exportDate || ''), Boolean(b.dryRun), user.name));
+    return send(res, 200, { status: 'ok', refs: new Set(refs).size, results });
   }
 
   // ---- Audit trail for one job ------------------------------------------
