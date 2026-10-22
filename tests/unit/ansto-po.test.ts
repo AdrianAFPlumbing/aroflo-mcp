@@ -7,6 +7,7 @@ import {
   findPrimaryForWo,
   needsPoProcessing,
   parseAnstoPoText,
+  sweepPoTasks,
   type AnstoTaskLite
 } from '../../src/aroflo/ansto-po.js';
 
@@ -59,6 +60,7 @@ function lite(p: Partial<AnstoTaskLite>): AnstoTaskLite {
     status: p.status ?? 'Not Started',
     createdutc: '',
     orderNo: p.orderNo ?? '',
+    hasOrderNoField: p.hasOrderNoField ?? true,
     documents: p.documents ?? []
   };
 }
@@ -107,5 +109,52 @@ describe('needsPoProcessing / findPrimaryForWo', () => {
     ];
     expect(findPrimaryForWo(tasks, '8202932', 'self')?.jobnumber).toBe('102');
     expect(findPrimaryForWo(tasks, '9999999', 'self')).toBeUndefined();
+  });
+});
+
+describe('sweepPoTasks legacy handling', () => {
+  const pdfDoc = (po: string) => [{ name: `${po}.pdf`, url: 'https://x' }];
+  const task = (jobnumber: string, po: string, withField: boolean) => ({
+    taskid: `t${jobnumber}`,
+    jobnumber,
+    taskname: `[UNMATCHED ANSTO PO ${po}]`,
+    custon: '',
+    status: 'Not Started',
+    documentsandphotos: pdfDoc(po),
+    customfields: withField
+      ? [{ name: 'ANSTO Order No', value: '' }]
+      : [{ name: 'Close off Number', value: '' }]
+  });
+  const fakeClient = (tasks: unknown[]) =>
+    ({
+      get: async () => ({
+        data: {
+          zoneresponse: { tasks, currentpageresults: tasks.length, maxpageresults: 500 }
+        }
+      }),
+      post: async () => {
+        throw new Error('no writes expected');
+      }
+    }) as never;
+
+  it('skips imports that pre-date the ANSTO Order No field unless includeLegacy', async () => {
+    const tasks = [task('267441', '4300168301', true), task('254180', '4300154828', false)];
+    const sweep = await sweepPoTasks(fakeClient(tasks), { dryRun: true });
+    expect(sweep.checked).toBe(2);
+    expect(sweep.candidates).toBe(1);
+    expect(sweep.legacySkipped).toEqual(['254180']);
+    // The modern import is attempted (PDF download fails against the fake URL -> error result).
+    expect(sweep.results.map((r) => r.jobnumber)).toEqual(['267441']);
+
+    const all = await sweepPoTasks(fakeClient(tasks), { dryRun: true, includeLegacy: true });
+    expect(all.candidates).toBe(2);
+    expect(all.legacySkipped).toEqual([]);
+  });
+
+  it('reads hasOrderNoField off the task custom fields', async () => {
+    const tasks = [task('1', '4300100000', true), task('2', '4300100001', false)];
+    const sweep = await sweepPoTasks(fakeClient(tasks), { dryRun: true, includeLegacy: true });
+    expect(sweep.candidates).toBe(2);
+    expect(sweep.legacySkipped).toEqual([]);
   });
 });

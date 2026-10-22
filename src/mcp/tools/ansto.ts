@@ -65,10 +65,12 @@ export function registerAnstoTools(
     {
       title: 'AroFlo: Sweep unmatched ANSTO PO imports',
       description:
-        'Finds recent ANSTO tasks that carry a SAP PO PDF (4300xxxxxx.pdf) but no 7-digit Work Order No as Cust ON (raw imports, "[UNMATCHED ANSTO PO ...]", "[NOT A JOB ...]") and processes each with the PO PDF: pairs to the existing WO job or converts the import into the job. Safe to run daily. dryRun previews without writing.',
+        'Finds recent ANSTO tasks that carry a SAP PO PDF (4300xxxxxx.pdf) but no 7-digit Work Order No as Cust ON (raw imports, "[UNMATCHED ANSTO PO ...]", "[NOT A JOB ...]") and processes each with the PO PDF: pairs to the existing WO job or converts the import into the job. Safe to run daily. dryRun previews without writing. ' +
+        'Imports created before the "ANSTO Order No" custom field existed are listed in legacySkipped and not processed unless includeLegacy=true (handle one by hand with aroflo_ansto_process_po - its Order No is recorded as a task note).',
       inputSchema: {
         dryRun: z.boolean().optional(),
-        pages: z.number().int().positive().max(5).optional()
+        pages: z.number().int().positive().max(5).optional(),
+        includeLegacy: z.boolean().optional()
       },
       outputSchema: z.object({}).passthrough(),
       annotations: { destructiveHint: true, openWorldHint: true }
@@ -76,7 +78,12 @@ export function registerAnstoTools(
     async (args) => {
       try {
         return successToolResult(
-          await sweepPoTasks(client, { dryRun: args.dryRun, pages: args.pages, v2: v2Client })
+          await sweepPoTasks(client, {
+            dryRun: args.dryRun,
+            pages: args.pages,
+            includeLegacy: args.includeLegacy,
+            v2: v2Client
+          })
         );
       } catch (error) {
         return errorToolResult(error);

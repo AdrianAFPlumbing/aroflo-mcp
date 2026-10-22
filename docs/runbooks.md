@@ -74,6 +74,16 @@ the task and acts deterministically:
 Tools: `aroflo_ansto_sweep_po_tasks` (run daily; `dryRun` previews),
 `aroflo_ansto_process_po` (one job number, or raw PO text), `aroflo_ansto_parse_po_text`.
 
+**Legacy tasks.** AroFlo stamps the custom-field layout onto a task when it is
+created, so tasks raised before **ANSTO Order No** was added to the layout do not
+carry the field and any write to it fails with `Field Not Found in Database`
+(code 701). The tool checks `hasOrderNoField` on the target task first: when the
+field is missing it records the Order No as a sticky internal task note instead
+and says so in the result `note`. The daily sweep lists such imports under
+`legacySkipped` and leaves them alone (they are months-old POs; converting them
+would raise stale jobs) unless called with `includeLegacy: true`. Handle one
+deliberately with `aroflo_ansto_process_po` on its job number.
+
 REST (for Power Automate / cron): `POST /ansto/sweep?dryRun=1` and
 `POST /ansto/po/<jobnumber>`, protected by env `ANSTO_WEBHOOK_TOKEN`
 (header `x-ansto-token` or `?token=`). Endpoints return 401 until the env var is set.

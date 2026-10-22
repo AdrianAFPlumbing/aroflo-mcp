@@ -247,6 +247,12 @@ export interface AnstoTaskLite {
   status: string;
   createdutc: string;
   orderNo: string;
+  /**
+   * AroFlo stamps the custom-field layout onto each task when it is created, so
+   * tasks raised before "ANSTO Order No" was added to the layout do not carry
+   * the field at all and any write to it fails with "Field Not Found in Database".
+   */
+  hasOrderNoField: boolean;
   documents: { name: string; url: string }[];
 }
 
@@ -262,20 +268,21 @@ function collectDocs(node: unknown, out: { name: string; url: string }[]): void 
   for (const v of Object.values(node)) if (Array.isArray(v) || isRecord(v)) collectDocs(v, out);
 }
 
-function readOrderNoField(task: Record<string, unknown>): string {
+function readOrderNoField(task: Record<string, unknown>): { present: boolean; value: string } {
   const cfs = task['customfields'];
-  if (!Array.isArray(cfs)) return '';
+  if (!Array.isArray(cfs)) return { present: false, value: '' };
   for (const cf of cfs) {
     if (isRecord(cf) && str(cf['name']).trim() === ANSTO_DEFAULTS.orderNoFieldName) {
-      return str(cf['value']).trim();
+      return { present: true, value: str(cf['value']).trim() };
     }
   }
-  return '';
+  return { present: false, value: '' };
 }
 
 function toLite(task: Record<string, unknown>): AnstoTaskLite {
   const documents: { name: string; url: string }[] = [];
   collectDocs(task['documentsandphotos'], documents);
+  const orderNo = readOrderNoField(task);
   return {
     taskid: str(task['taskid']),
     jobnumber: str(task['jobnumber']),
@@ -283,7 +290,8 @@ function toLite(task: Record<string, unknown>): AnstoTaskLite {
     custon: str(task['custon']).trim(),
     status: str(task['status']),
     createdutc: str(task['createdutc']),
-    orderNo: readOrderNoField(task),
+    orderNo: orderNo.value,
+    hasOrderNoField: orderNo.present,
     documents
   };
 }
@@ -386,6 +394,25 @@ export function findPrimaryForPo(
 function cdata(s: string): string {
   return `<![CDATA[${s.replace(/]]>/g, ']]]]><![CDATA[>')}]]>`;
 }
+
+function orderNoFieldXml(value: string): string {
+  return `<customfields><customfield><name>${ANSTO_DEFAULTS.orderNoFieldName}</name><value>${cdata(
+    value
+  )}</value></customfield></customfields>`;
+}
+
+/**
+ * Fallback for tasks that do not carry the "ANSTO Order No" field (created before
+ * it was added to the layout): record the Order No as a sticky internal note.
+ */
+function orderNoNoteXml(orderNo: string): string {
+  return `<notes><note><content>${cdata(
+    `ANSTO Order No: ${orderNo} (recorded as a note - this task was created before the "ANSTO Order No" custom field existed)`
+  )}</content><filter><![CDATA[Internal Only]]></filter><sticky>true</sticky></note></notes>`;
+}
+
+const LEGACY_FIELD_NOTE =
+  'Order No recorded as a task note - "ANSTO Order No" field not on this task';
 
 function mergeOrderNos(existing: string, orderNo: string): string {
   const parts = existing
@@ -549,14 +576,21 @@ async function applyParsedPo(
         note: `Would pair with JN ${primary.jobnumber}`
       };
     }
-    const merged = mergeOrderNos(primary.orderNo, orderNo);
-    if (merged !== primary.orderNo) {
+    let legacyNote: string | undefined;
+    if (primary.hasOrderNoField) {
+      const merged = mergeOrderNos(primary.orderNo, orderNo);
+      if (merged !== primary.orderNo) {
+        await postTask(
+          client,
+          `<tasks><task><taskid>${primary.taskid}</taskid>${orderNoFieldXml(merged)}</task></tasks>`
+        );
+      }
+    } else {
       await postTask(
         client,
-        `<tasks><task><taskid>${primary.taskid}</taskid><customfields><customfield><name>${
-          ANSTO_DEFAULTS.orderNoFieldName
-        }</name><value>${cdata(merged)}</value></customfield></customfields></task></tasks>`
+        `<tasks><task><taskid>${primary.taskid}</taskid>${orderNoNoteXml(orderNo)}</task></tasks>`
       );
+      legacyNote = `${LEGACY_FIELD_NOTE} (JN ${primary.jobnumber})`;
     }
     if (importTask) {
       await postTask(
@@ -591,7 +625,7 @@ async function applyParsedPo(
       }
     }
     return {
-      note: pdfNote,
+      note: [legacyNote, pdfNote].filter(Boolean).join('; ') || undefined,
       outcome: 'paired-with-existing',
       jobnumber: importTask?.jobnumber,
       orderNo,
@@ -624,15 +658,16 @@ async function applyParsedPo(
     `<custon>${cdata(reference)}</custon>` +
     `<description>${cdata(description)}</description>` +
     `<status>Not Started</status>` +
-    `<substatus><substatusid>${ANSTO_DEFAULTS.newTaskSubstatusId}</substatusid></substatus>` +
-    `<customfields><customfield><name>${ANSTO_DEFAULTS.orderNoFieldName}</name><value>${cdata(
-      orderNo
-    )}</value></customfield></customfields>`;
+    `<substatus><substatusid>${ANSTO_DEFAULTS.newTaskSubstatusId}</substatusid></substatus>`;
 
   if (importTask) {
+    // An import raised before the field existed cannot take the custom field.
+    const fieldXml = importTask.hasOrderNoField
+      ? orderNoFieldXml(orderNo)
+      : orderNoNoteXml(orderNo);
     await postTask(
       client,
-      `<tasks><task><taskid>${importTask.taskid}</taskid>${common}</task></tasks>`
+      `<tasks><task><taskid>${importTask.taskid}</taskid>${common}${fieldXml}</task></tasks>`
     );
     logger.info(
       { orderNo, workOrderNo: po.workOrderNo, jobnumber: importTask.jobnumber },
@@ -643,7 +678,8 @@ async function applyParsedPo(
       jobnumber: importTask.jobnumber,
       orderNo,
       workOrderNo: po.workOrderNo,
-      taskName
+      taskName,
+      note: importTask.hasOrderNoField ? undefined : LEGACY_FIELD_NOTE
     };
   }
 
@@ -656,6 +692,7 @@ async function applyParsedPo(
       `<tasktype><tasktypeid>${ANSTO_DEFAULTS.taskTypeId}</tasktypeid></tasktype>` +
       `<duedate>${due}</duedate>` +
       common +
+      orderNoFieldXml(orderNo) +
       `</task></tasks>`
   );
   let jobnumber: string | undefined;
@@ -698,14 +735,34 @@ async function applyParsedPo(
  */
 export async function sweepPoTasks(
   client: AroFloClient,
-  options: { dryRun?: boolean; pages?: number; v2?: AroFloV2Client } = {}
-): Promise<{ checked: number; candidates: number; results: PoResult[] }> {
+  options: {
+    dryRun?: boolean;
+    pages?: number;
+    v2?: AroFloV2Client;
+    /**
+     * Also process imports created before the "ANSTO Order No" field existed
+     * (their Order No is recorded as a task note instead). Off by default: those
+     * are months-old POs and converting them would raise stale jobs. Handle one
+     * deliberately with processPoTask / aroflo_ansto_process_po.
+     */
+    includeLegacy?: boolean;
+  } = {}
+): Promise<{
+  checked: number;
+  candidates: number;
+  legacySkipped: string[];
+  results: PoResult[];
+}> {
   const tasks = await listRecentAnstoTasks(client, {
     pages: options.pages ?? 2,
     pageSize: 500,
     withDocuments: true
   });
-  const candidates = tasks.filter(needsPoProcessing);
+  const unmatched = tasks.filter(needsPoProcessing);
+  const legacySkipped = options.includeLegacy
+    ? []
+    : unmatched.filter((t) => !t.hasOrderNoField).map((t) => t.jobnumber);
+  const candidates = options.includeLegacy ? unmatched : unmatched.filter((t) => t.hasOrderNoField);
   const results: PoResult[] = [];
   for (const task of candidates) {
     try {
@@ -724,5 +781,5 @@ export async function sweepPoTasks(
       });
     }
   }
-  return { checked: tasks.length, candidates: candidates.length, results };
+  return { checked: tasks.length, candidates: candidates.length, legacySkipped, results };
 }
