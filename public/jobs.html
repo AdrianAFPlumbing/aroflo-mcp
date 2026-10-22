@@ -127,6 +127,7 @@ let tab = 'action';
 try { tab = localStorage.getItem('afp-jobs-tab') || 'action'; } catch (e) {}
 const filters = { client: '', q: '', closedDays: '7' };
 const sel = new Set();
+let notice = '';
 
 async function api(path, opts = {}) {
   const r = await fetch('/portal/' + path, {
@@ -275,7 +276,7 @@ function render() {
   const p = $('#panel');
   try { localStorage.setItem('afp-jobs-tab', tab); } catch (e) {}
   if (tab === 'action') {
-    p.innerHTML = filterBar() +
+    p.innerHTML = (notice ? `<div style="background:var(--greenbg);color:var(--green);border-radius:8px;padding:10px 12px;margin-bottom:10px;font-weight:600">${esc(notice)} <button data-dismiss style="margin-left:8px">OK</button></div>` : '') + filterBar() +
       '<h2>KPI at risk</h2><p class="hint">Open jobs that are overdue or close to their respond / complete KPI. Respond is met when a technician is first assigned.</p>' +
       riskTable(jobs.filter(isRisk)) +
       '<h2>Ready to close off in the client portal</h2><p class="hint">Completed in AroFlo, not yet closed in the portal.</p>' +
@@ -427,17 +428,26 @@ document.addEventListener('click', async (e) => {
   if (!t) return;
   if (t.dataset.tab) { tab = t.dataset.tab; render(); return; }
   if (t.dataset.sel !== undefined) { t.checked ? sel.add(t.dataset.sel) : sel.delete(t.dataset.sel); const b = $('#queueSel'); if (b) { b.disabled = !sel.size; b.textContent = `Close off selected in portal (${sel.size})`; } return; }
+  if (t.hasAttribute && t.hasAttribute('data-dismiss')) { notice = ''; render(); return; }
   if (t.id === 'selAll') { document.querySelectorAll('[data-sel]').forEach((c) => { c.checked = true; sel.add(c.dataset.sel); }); render(); return; }
   if (t.id === 'queueSel') {
+    const all = [...sel];
+    const noExport = [...new Set(data.jobs.filter((j) => sel.has(j.jobNo) && ['uos', 'unsw', 'bsafe', 'shp'].includes(j.portal)).map((j) => j.portalLabel))];
+    const warn = noExport.length ? `\n\nNo portal export has been loaded yet for: ${noExport.join(', ')}. Some of these may already be closed in the portal - the runner will check and skip those.` : '';
+    if (!confirm(`Queue ${all.length} job${all.length === 1 ? '' : 's'} for portal close-off?${warn}`)) return;
     t.disabled = true;
+    let ok = 0; const bad = [];
     try {
-      const r = await api('kpi/closeoff', { method: 'POST', body: JSON.stringify({ jobNos: [...sel] }) });
-      const ok = r.results.filter((x) => x.queued).length;
-      const bad = r.results.filter((x) => !x.queued).map((x) => `${x.jobNo} (${x.reason})`);
+      for (let i = 0; i < all.length; i += 100) {
+        t.textContent = `Queuing ${Math.min(i + 100, all.length)} of ${all.length}…`;
+        const r = await api('kpi/closeoff', { method: 'POST', body: JSON.stringify({ jobNos: all.slice(i, i + 100) }) });
+        ok += r.results.filter((x) => x.queued).length;
+        bad.push(...r.results.filter((x) => !x.queued).map((x) => `${x.jobNo} (${x.reason})`));
+      }
       sel.clear();
-      toast(`${ok} queued for close-off${bad.length ? '. Not queued: ' + bad.join(', ') : ''}`);
+      notice = `${ok} job${ok === 1 ? '' : 's'} queued for portal close-off. The runner works through them each hour on weekdays (6:47am–4:47pm) - progress is in the Close-off queue tab.${bad.length ? ' Not queued: ' + bad.join(', ') : ''}`;
       await load();
-    } catch (err) { toast(err.message); t.disabled = false; }
+    } catch (err) { toast(err.message); t.disabled = false; t.textContent = `Close off selected in portal (${sel.size})`; }
     return;
   }
   if (t.dataset.cancel) { try { await api('kpi/closeoff/' + t.dataset.cancel, { method: 'DELETE' }); toast('Cancelled'); await load(); } catch (err) { toast(err.message); } return; }
