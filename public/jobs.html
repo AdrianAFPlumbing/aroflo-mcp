@@ -157,7 +157,7 @@ function chip(leg, label) {
   const title = leg.dueAt ? 'Due ' + fd(leg.dueAt) + (leg.doneAt ? ' · done ' + fd(leg.doneAt) : '') : '';
   return `<span class="chip ${leg.state}" title="${esc(title)}">${label} ${STATE[leg.state] || leg.state}${extra}</span>`;
 }
-const aroLink = (j) => j.webappId ? `https://office.aroflo.com/ims/Site/Service/workrequest/index.cfm?viewexist=1&wrCoded=${encodeURIComponent(j.webappId)}` : null;
+const aroLink = (j) => j.webappId ? `https://office.aroflo.com/ims/Site/Service/workrequest/index.cfm?viewexist=1&wrCoded=${j.webappId}` : null;
 function jnCell(j) {
   const u = aroLink(j);
   return `<td class="jn" data-l="Job">${u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(j.jobNo)}</a>` : esc(j.jobNo)}<div class="sub">${esc(j.ref || '')}</div></td>`;
