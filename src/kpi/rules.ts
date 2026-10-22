@@ -179,8 +179,8 @@ export function pickRule(rules: KpiRule[], priorityId: string | null, client: st
 // ---------------------------------------------------------------------------
 // Which client portal (if any) a job must be closed off in.
 // ---------------------------------------------------------------------------
-export type PortalKey = 'uos' | 'unsw' | 'mywork_ausgrid' | 'mywork_defence' | 'mywork_stockland' | 'bsafe' | 'knightfrank';
-export const PORTAL_KEYS: PortalKey[] = ['uos', 'unsw', 'mywork_ausgrid', 'mywork_defence', 'mywork_stockland', 'bsafe', 'knightfrank'];
+export type PortalKey = 'uos' | 'unsw' | 'mywork_ausgrid' | 'mywork_defence' | 'mywork_stockland' | 'bsafe' | 'knightfrank' | 'shp';
+export const PORTAL_KEYS: PortalKey[] = ['uos', 'unsw', 'mywork_ausgrid', 'mywork_defence', 'mywork_stockland', 'bsafe', 'knightfrank', 'shp'];
 
 export const PORTAL_LABEL: Record<PortalKey, string> = {
   uos: 'UOS Archibus',
@@ -189,7 +189,8 @@ export const PORTAL_LABEL: Record<PortalKey, string> = {
   mywork_defence: 'Downer Mywork (Defence)',
   mywork_stockland: 'Downer Mywork (Stockland)',
   bsafe: 'BGIS BSAFE',
-  knightfrank: 'Knight Frank FRC'
+  knightfrank: 'Knight Frank FRC',
+  shp: 'Stanton Hillier Parker MyBuildings'
 };
 
 // null = no close-off procedure recorded yet; the runner reports these as needs_adrian.
@@ -200,7 +201,8 @@ export const PORTAL_SKILL: Record<PortalKey, string | null> = {
   mywork_defence: 'downer-reconcile',
   mywork_stockland: 'downer-reconcile',
   bsafe: 'bsafe-close',
-  knightfrank: null
+  knightfrank: 'kf-shp-close-off',
+  shp: 'kf-shp-close-off'
 };
 
 export function portalFor(client: string): PortalKey | null {
@@ -212,5 +214,6 @@ export function portalFor(client: string): PortalKey | null {
   if (c.includes('downer') && c.includes('stockland')) return 'mywork_stockland';
   if (c.startsWith('bgis')) return 'bsafe';
   if (c.startsWith('knight frank')) return 'knightfrank';
+  if (c.includes('stanton hillier')) return 'shp';
   return null;
 }

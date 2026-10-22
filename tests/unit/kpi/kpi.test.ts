@@ -70,6 +70,7 @@ describe('portal mapping', () => {
     expect(portalFor('BGIS - OPTUS')).toBe('bsafe');
     expect(portalFor('Downer - Stockland')).toBe('mywork_stockland');
     expect(portalFor('Knight Frank')).toBe('knightfrank');
+    expect(portalFor('Stanton Hillier Parker')).toBe('shp');
     expect(portalFor('ANSTO')).toBeNull();
   });
 });
