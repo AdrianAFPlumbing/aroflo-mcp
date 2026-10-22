@@ -178,6 +178,13 @@ export async function syncKpiOnce(client: AroFloClient): Promise<{ open: number;
       : new Date(Date.now() - 45 * 86_400_000);
 
     try {
+      // Re-tag every stored job's portal from its client name, so jobs synced before a
+      // portal was added (or before a client mapping changed) are picked up.
+      const clients = await query<{ client: string }>('SELECT DISTINCT client FROM kpi_jobs');
+      for (const { client: c } of clients) {
+        await query('UPDATE kpi_jobs SET portal = $1 WHERE client = $2 AND portal IS DISTINCT FROM $1', [portalFor(c), c]);
+      }
+
       const open = await pullAll(client, ['and|status|IN|notstarted*inprogress*pending*quote', ORG_FILTER]);
       const done = await pullAll(client, ['and|status|IN|completed*archived', `and|datecompleted|>=|${ymd(since)}`, ORG_FILTER]);
 
