@@ -81,7 +81,7 @@ input[type=text],input[type=password],input[type=datetime-local],input[type=numb
 <body>
 <div id="login" hidden>
   <h2 style="margin-top:0">AFP Jobs &amp; KPIs</h2>
-  <p class="sub">Sign in with your Quote Portal name and PIN.</p>
+  <p class="sub">Sign in with your name and PIN.</p>
   <label for="lname">Name or email</label><input id="lname" type="text" autocomplete="username">
   <label for="lpin">PIN</label><input id="lpin" type="password" inputmode="numeric" autocomplete="current-password">
   <div class="err" id="lerr"></div>
@@ -226,6 +226,7 @@ function renderTiles() {
 function renderTabs() {
   const c = counts();
   const tabs = [['action', 'Needs action', c.action, true], ['open', 'All open'], ['closed', 'Recently closed'], ['queue', 'Close-off queue', c.queue], ['gaps', 'Data gaps', c.gaps, true], ['rules', 'KPI rules']];
+  if (data.user.isAdmin) tabs.push(['users', 'Users']);
   $('#tabs').innerHTML = tabs.map(([k, l, n, r]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}${n !== undefined ? `<span class="n ${r && n ? 'r' : ''}">${n}</span>` : ''}</button>`).join('');
 }
 
@@ -313,6 +314,8 @@ function render() {
       ${jnCell(j)}${jobCell(j)}<td data-l="Problem">${esc(gap(j))}</td><td data-l="Received">${fd(j.receivedAt)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">No data gaps.</td></tr>'}</tbody></table>`;
   } else if (tab === 'rules') {
     renderRules(p);
+  } else if (tab === 'users') {
+    renderUsers(p);
   }
 }
 const PORTAL_NAMES = { uos: 'UOS Archibus', unsw: 'UNSW Archibus', mywork_ausgrid: 'Downer Mywork (Ausgrid/Asahi)', mywork_defence: 'Downer Mywork (Defence)', bsafe: 'BGIS BSAFE' };
@@ -332,6 +335,25 @@ function renderRules(p) {
     <td data-l="Confirmed"><input type="checkbox" data-f="confirmed" ${r.confirmed ? 'checked' : ''} ${dis}></td>
     <td data-l="Notes"><input type="text" value="${esc(r.notes)}" data-f="notes" ${dis}><div class="sub">${esc(r.updatedBy || '')} ${fd(r.updatedAt)}</div></td>
     <td>${admin ? '<button data-saverule>Save</button>' : ''}</td></tr>`).join('')}</tbody></table>`;
+}
+
+// ---------- users (admin) ----------
+let users = null;
+async function renderUsers(p) {
+  if (!users) { p.innerHTML = '<div class="empty">Loading…</div>'; try { users = (await api('users')).users; } catch (err) { p.innerHTML = `<div class="empty">${esc(err.message)}</div>`; return; } }
+  p.innerHTML = `<p class="hint">Everyone signs in with their name (or email) and PIN. Admins can refresh from AroFlo, edit KPI rules and manage users.</p>
+    <table><thead><tr><th>Name</th><th>Email</th><th>Admin</th><th>Active</th><th>New PIN</th><th></th></tr></thead><tbody>${users.map((u) => `<tr data-user="${esc(u.id)}">
+    <td data-l="Name"><input type="text" data-u="name" value="${esc(u.name)}"></td>
+    <td data-l="Email"><input type="text" data-u="email" value="${esc(u.email || '')}"></td>
+    <td data-l="Admin"><input type="checkbox" data-u="isAdmin" ${u.is_admin ? 'checked' : ''}></td>
+    <td data-l="Active"><input type="checkbox" data-u="active" ${u.active ? 'checked' : ''}></td>
+    <td data-l="New PIN"><input type="password" data-u="pin" inputmode="numeric" placeholder="unchanged" autocomplete="new-password"></td>
+    <td><button data-saveuser>Save</button></td></tr>`).join('')}
+    <tr data-user="new"><td data-l="Name"><input type="text" data-u="name" placeholder="New person"></td>
+    <td data-l="Email"><input type="text" data-u="email"></td>
+    <td data-l="Admin"><input type="checkbox" data-u="isAdmin"></td><td></td>
+    <td data-l="PIN"><input type="password" data-u="pin" inputmode="numeric" placeholder="4+ digits" autocomplete="new-password"></td>
+    <td><button class="primary" data-saveuser>Add</button></td></tr></tbody></table>`;
 }
 
 // ---------- events ----------
@@ -358,6 +380,20 @@ document.addEventListener('click', async (e) => {
   if (t.dataset.uncallout) {
     if (!confirm(`Remove the callout backdate on job ${t.dataset.uncallout}?`)) return;
     try { await api('kpi/callout/' + t.dataset.uncallout, { method: 'DELETE' }); toast('Callout removed'); await load(); } catch (err) { toast(err.message); }
+    return;
+  }
+  if (t.hasAttribute('data-saveuser')) {
+    const tr = t.closest('tr'); const g = (f) => tr.querySelector(`[data-u="${f}"]`);
+    const id = tr.dataset.user;
+    const body = { name: g('name').value.trim(), email: g('email').value.trim(), isAdmin: g('isAdmin').checked };
+    if (g('pin').value.trim()) body.pin = g('pin').value.trim();
+    if (id !== 'new') body.active = g('active').checked;
+    if (body.pin && body.pin.length < 4) { toast('PIN must be at least 4 digits'); return; }
+    if (id === 'new' && (!body.name || !body.pin)) { toast('Enter a name and PIN'); return; }
+    try {
+      await api(id === 'new' ? 'users' : 'users/' + id, { method: id === 'new' ? 'POST' : 'PATCH', body: JSON.stringify(body) });
+      users = null; toast(id === 'new' ? 'User added' : 'Saved'); render();
+    } catch (err) { toast(err.message); }
     return;
   }
   if (t.hasAttribute('data-saverule')) {

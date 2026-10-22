@@ -1,6 +1,6 @@
 # Jobs & KPI dashboard
 
-URL: `<railway domain>/jobs` — same staff logins (name + PIN) as the Quote Portal. Admins manage users in the Quote Portal.
+URL: the Railway domain root (`/`; `/jobs` also works). Staff log in with name + PIN; admins manage users in the Users tab. The Quote Portal front-end was retired on 2026-10-22 (its tables are kept).
 
 ## Data
 - Synced from AroFlo every 30 min, 05:30–19:30 Sydney (`KPI_SYNC_MIN`), Plumbing Sydney only. Admins can force a refresh.

@@ -5,7 +5,6 @@ import { logger } from '../utils/logger.js';
 import { createAroFloClient, createAroFloMcpServer, createAroFloV2Client } from './app.js';
 import { startHttpServer, stopHttpServer } from './http.js';
 import { initSchema } from '../db/db.js';
-import { startTaskSync, stopTaskSync } from '../sync/sync.js';
 import { startKpiSync, stopKpiSync } from '../kpi/sync.js';
 
 function registerShutdown(handler: () => Promise<void>): void {
@@ -48,7 +47,6 @@ async function startHttpMode(): Promise<void> {
   } catch (error) {
     logger.error({ err: error }, 'Portal schema init failed (continuing without DB features)');
   }
-  startTaskSync(client);
   startKpiSync(client);
 
   const httpServer = await startHttpServer({
@@ -61,7 +59,6 @@ async function startHttpMode(): Promise<void> {
 
   registerShutdown(async () => {
     logger.info('Shutting down AroFlo MCP server (http)');
-    stopTaskSync();
     stopKpiSync();
     await stopHttpServer(httpServer);
     process.exit(0);
