@@ -2,7 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
 import { dbConfigured, query } from '../../db/db.js';
-import { PORTAL_LABEL, PORTAL_SKILL, type PortalKey } from '../../kpi/rules.js';
+import { PORTAL_KEYS, PORTAL_LABEL, PORTAL_SKILL, type PortalKey } from '../../kpi/rules.js';
 import { audit } from '../../kpi/store.js';
 import { formatSydney } from '../../kpi/time.js';
 import { errorToolResult, successToolResult } from './shared.js';
@@ -21,7 +21,7 @@ export function registerCloseoffTools(server: McpServer): void {
         'portal, client reference (WR / service order / BSAFE WO), the FIRST AroFlo completion time and the skill to run. ' +
         'Close-offs stuck in_progress for over 3 hours are re-queued first. Call afp_closeoff_report for EVERY claimed item.',
       inputSchema: {
-        portal: z.enum(['uos', 'unsw', 'mywork_ausgrid', 'mywork_defence', 'bsafe']).optional(),
+        portal: z.enum(PORTAL_KEYS as [PortalKey, ...PortalKey[]]).optional(),
         limit: z.number().int().positive().max(50).optional()
       },
       outputSchema: z.object({}).passthrough(),
@@ -69,10 +69,63 @@ export function registerCloseoffTools(server: McpServer): void {
           rules:
             'Use the real AroFlo attendance and completion times. If a portal will only accept times inside a KPI window ' +
             'that the real times do not fit, do NOT invent times: report outcome needs_adrian with the reason. ' +
-            'If a portal login or MFA prompt appears, report needs_adrian ("login required").'
+            'If a portal login or MFA prompt appears, report needs_adrian ("login required"). ' +
+            'Items whose skill is null have no recorded close-off procedure yet: do not attempt them, report needs_adrian ("no close-off procedure for <portal> yet").'
         });
       } catch (error) {
         return errorToolResult(error, { mode: 'data', debug: { tool: 'afp_closeoff_claim' } });
+      }
+    }
+  );
+
+  server.registerTool(
+    'afp_portal_baseline',
+    {
+      title: 'AFP: Load a portal open-orders export as the close-off baseline',
+      description:
+        'Given the full list of orders still OPEN in one client portal (from a portal export), mark every job on the KPI ' +
+        'dashboard for that portal that is completed in AroFlo but NOT in the open list as already closed in the portal. ' +
+        'Jobs in the open list stay as "awaiting close-off". Jobs with no client reference are left alone. Use dryRun first.',
+      inputSchema: {
+        portal: z.enum(PORTAL_KEYS as [PortalKey, ...PortalKey[]]),
+        openRefs: z.array(z.string().min(3)).describe('Every order/WR number still open in the portal export'),
+        exportDate: z.string().describe('Date of the export, DD/MM/YYYY'),
+        dryRun: z.boolean().optional()
+      },
+      outputSchema: z.object({}).passthrough(),
+      annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false }
+    },
+    async (args) => {
+      try {
+        const refs = args.openRefs.map((r) => r.trim().toUpperCase()).filter(Boolean);
+        const where = `portal = $1 AND first_completed_at IS NOT NULL AND COALESCE(portal_close_value,'') = ''
+             AND COALESCE(TRIM(custon),'') <> ''
+             AND NOT EXISTS (SELECT 1 FROM unnest($2::text[]) r WHERE upper(custon) LIKE '%' || r || '%')`;
+        const toClose = await query<any>(`SELECT job_no, custon FROM kpi_jobs WHERE ${where} ORDER BY job_no`, [args.portal, refs]);
+        const stillOpen = await query<any>(
+          `SELECT job_no, custon FROM kpi_jobs WHERE portal = $1 AND first_completed_at IS NOT NULL
+              AND EXISTS (SELECT 1 FROM unnest($2::text[]) r WHERE upper(custon) LIKE '%' || r || '%') ORDER BY job_no`,
+          [args.portal, refs]
+        );
+        const noRef = await query<any>(
+          `SELECT job_no FROM kpi_jobs WHERE portal = $1 AND first_completed_at IS NOT NULL AND COALESCE(portal_close_value,'') = ''
+              AND COALESCE(TRIM(custon),'') = ''`,
+          [args.portal]
+        );
+        if (!args.dryRun) {
+          await query(`UPDATE kpi_jobs SET portal_close_value = $3, portal_close_date = $4 WHERE ${where}`,
+            [args.portal, refs, 'CLOSED PER PORTAL EXPORT', args.exportDate]);
+          await audit(null, 'portal_baseline', { portal: args.portal, exportDate: args.exportDate, openRefs: refs.length, markedClosed: toClose.length }, 'Portal export import');
+        }
+        return successToolResult({
+          portal: args.portal,
+          dryRun: Boolean(args.dryRun),
+          markedClosed: toClose.length,
+          awaitingCloseOff: stillOpen.map((r) => `${r.job_no} (${r.custon})`),
+          completedWithNoClientRef: noRef.map((r) => r.job_no)
+        });
+      } catch (error) {
+        return errorToolResult(error, { mode: 'data', debug: { tool: 'afp_portal_baseline' } });
       }
     }
   );

@@ -68,7 +68,8 @@ describe('portal mapping', () => {
     expect(portalFor('Downer Asahi')).toBe('mywork_ausgrid');
     expect(portalFor('Downer (Defence)')).toBe('mywork_defence');
     expect(portalFor('BGIS - OPTUS')).toBe('bsafe');
-    expect(portalFor('Downer - Stockland')).toBeNull();
+    expect(portalFor('Downer - Stockland')).toBe('mywork_stockland');
+    expect(portalFor('Knight Frank')).toBe('knightfrank');
     expect(portalFor('ANSTO')).toBeNull();
   });
 });

@@ -179,22 +179,28 @@ export function pickRule(rules: KpiRule[], priorityId: string | null, client: st
 // ---------------------------------------------------------------------------
 // Which client portal (if any) a job must be closed off in.
 // ---------------------------------------------------------------------------
-export type PortalKey = 'uos' | 'unsw' | 'mywork_ausgrid' | 'mywork_defence' | 'bsafe';
+export type PortalKey = 'uos' | 'unsw' | 'mywork_ausgrid' | 'mywork_defence' | 'mywork_stockland' | 'bsafe' | 'knightfrank';
+export const PORTAL_KEYS: PortalKey[] = ['uos', 'unsw', 'mywork_ausgrid', 'mywork_defence', 'mywork_stockland', 'bsafe', 'knightfrank'];
 
 export const PORTAL_LABEL: Record<PortalKey, string> = {
   uos: 'UOS Archibus',
   unsw: 'UNSW Archibus',
   mywork_ausgrid: 'Downer Mywork (Ausgrid/Asahi)',
   mywork_defence: 'Downer Mywork (Defence)',
-  bsafe: 'BGIS BSAFE'
+  mywork_stockland: 'Downer Mywork (Stockland)',
+  bsafe: 'BGIS BSAFE',
+  knightfrank: 'Knight Frank FRC'
 };
 
-export const PORTAL_SKILL: Record<PortalKey, string> = {
+// null = no close-off procedure recorded yet; the runner reports these as needs_adrian.
+export const PORTAL_SKILL: Record<PortalKey, string | null> = {
   uos: 'uos-archibus-close-off',
   unsw: 'unsw-archibus-close-off',
   mywork_ausgrid: 'ausgrid-close',
   mywork_defence: 'downer-reconcile',
-  bsafe: 'bsafe-close'
+  mywork_stockland: 'downer-reconcile',
+  bsafe: 'bsafe-close',
+  knightfrank: null
 };
 
 export function portalFor(client: string): PortalKey | null {
@@ -203,6 +209,8 @@ export function portalFor(client: string): PortalKey | null {
   if (c.includes('unsw') || c.includes('university of new south wales')) return 'unsw';
   if (c.includes('downer') && (c.includes('ausgrid') || c.includes('asahi'))) return 'mywork_ausgrid';
   if (c.includes('downer') && c.includes('defence')) return 'mywork_defence';
+  if (c.includes('downer') && c.includes('stockland')) return 'mywork_stockland';
   if (c.startsWith('bgis')) return 'bsafe';
+  if (c.startsWith('knight frank')) return 'knightfrank';
   return null;
 }
