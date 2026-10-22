@@ -5,6 +5,7 @@ import { logger } from '../utils/logger.js';
 import { dbConfigured, query, hashPin, verifyPin } from '../db/db.js';
 import type { AroFloClient } from '../aroflo/client.js';
 import { fetchJobPhotos } from './rest.js';
+import { handleKpi } from '../kpi/routes.js';
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -130,6 +131,12 @@ export async function handlePortal(
       const token = tokenFromReq(req);
       await query('DELETE FROM sessions WHERE token = $1', [token]);
       return (send(res, 200, { status: 'ok' }), true);
+    }
+
+    // --- KPI dashboard + portal close-off queue ----------------------------
+    if (parts[0] === 'kpi') {
+      await handleKpi(req, res, parts, user, aroflo, send, readBody);
+      return true;
     }
 
     // --- Users (admin only) ----------------------------------------------

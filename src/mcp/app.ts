@@ -13,6 +13,7 @@ import { registerReportTools } from './tools/reports.js';
 import { registerV2Tools } from './tools/v2.js';
 import { registerAnstoTools } from './tools/ansto.js';
 import { registerClientMatchTools } from './tools/client-match.js';
+import { registerCloseoffTools } from './tools/closeoff.js';
 import { AroFloV2Client } from '../aroflo/v2-client.js';
 
 /**
@@ -60,6 +61,8 @@ export function createAroFloMcpServer(client: AroFloClient, v2Client?: AroFloV2C
   registerZoneGetTools(server, client);
   registerReportTools(server, client);
   registerAnstoTools(server, client, v2Client);
+  registerClientMatchTools(server, client);
+  registerCloseoffTools(server);
   if (v2Client) {
     registerV2Tools(server, v2Client, client);
   }

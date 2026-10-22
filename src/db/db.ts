@@ -3,6 +3,7 @@ import { randomUUID, scryptSync, randomBytes, timingSafeEqual } from 'node:crypt
 import pg from 'pg';
 
 import { logger } from '../utils/logger.js';
+import { initKpiSchema } from '../kpi/store.js';
 
 const { Pool } = pg;
 
@@ -139,6 +140,7 @@ export async function initSchema(): Promise<void> {
   `);
 
   await seedUsers();
+  await initKpiSchema();
   initialized = true;
   logger.info('Portal schema ready');
 }

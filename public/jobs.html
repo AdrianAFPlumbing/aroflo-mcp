@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AFP Jobs &amp; KPIs</title>
+<style>
+:root{
+  --navy:#0B2A4E;--navy2:#123a66;--bg:#f3f5f8;--card:#fff;--ink:#14202e;--muted:#5d6b7c;--line:#dde3ea;
+  --red:#c62828;--redbg:#fdecea;--amber:#a15c00;--amberbg:#fff4e0;--green:#1b7a3a;--greenbg:#e6f4ea;--grey:#6b7785;--greybg:#eef1f4;--blue:#1d5fa8;--bluebg:#e7f0fb;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+header{background:var(--navy);color:#fff;padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;position:sticky;top:0;z-index:5}
+header h1{font-size:17px;margin:0;font-weight:650}
+header .sync{font-size:12px;opacity:.8}
+header .sp{flex:1}
+header button{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25)}
+button{font:inherit;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:7px;padding:6px 12px;cursor:pointer}
+button.primary{background:var(--navy);border-color:var(--navy);color:#fff}
+button:disabled{opacity:.5;cursor:default}
+nav{display:flex;gap:4px;padding:10px 16px 0;overflow-x:auto;background:var(--bg)}
+nav button{border:none;background:none;padding:8px 12px;border-radius:7px 7px 0 0;color:var(--muted);white-space:nowrap}
+nav button.on{background:var(--card);color:var(--ink);font-weight:600;box-shadow:0 -1px 0 var(--line) inset}
+nav .n{display:inline-block;min-width:18px;padding:0 5px;margin-left:4px;border-radius:9px;background:var(--greybg);font-size:11px;text-align:center}
+nav .n.r{background:var(--redbg);color:var(--red)}
+main{padding:0 16px 40px;max-width:1300px;margin:0 auto}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:0 10px 10px 10px;padding:14px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin:14px 0}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.tile h3{margin:0 0 6px;font-size:13px}
+.tile .row{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
+.tile .row b{color:var(--ink)}
+.tile .row b.r{color:var(--red)}
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.bar select,.bar input{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:#fff}
+h2{font-size:15px;margin:16px 0 8px}
+h2:first-child{margin-top:2px}
+.hint{color:var(--muted);font-size:12px;margin:-4px 0 8px}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);font-weight:600;background:#fafbfc;position:sticky;top:56px}
+td.jn a{font-weight:650;color:var(--blue);text-decoration:none}
+.sub{color:var(--muted);font-size:12px}
+.chip{display:inline-block;padding:1px 7px;border-radius:9px;font-size:11.5px;font-weight:600;white-space:nowrap}
+.met{background:var(--greenbg);color:var(--green)}
+.missed,.overdue{background:var(--redbg);color:var(--red)}
+.due_soon{background:var(--amberbg);color:var(--amber)}
+.on_track{background:var(--bluebg);color:var(--blue)}
+.no_kpi,.not_recorded{background:var(--greybg);color:var(--grey)}
+.callout{background:#efe7fb;color:#5b2ea6}
+.unconf{background:var(--amberbg);color:var(--amber)}
+.empty{padding:18px;color:var(--muted);text-align:center}
+.q-queued{background:var(--bluebg);color:var(--blue)}
+.q-in_progress{background:var(--amberbg);color:var(--amber)}
+.q-done{background:var(--greenbg);color:var(--green)}
+.q-failed,.q-needs_adrian{background:var(--redbg);color:var(--red)}
+.q-skipped,.q-cancelled{background:var(--greybg);color:var(--grey)}
+dialog{border:none;border-radius:12px;padding:0;max-width:440px;width:calc(100% - 32px)}
+dialog::backdrop{background:rgba(11,42,78,.45)}
+dialog form{padding:18px}
+dialog h3{margin:0 0 10px}
+label{display:block;font-size:12px;color:var(--muted);margin:10px 0 3px}
+input[type=text],input[type=password],input[type=datetime-local],input[type=number],textarea,select{width:100%;font:inherit;padding:7px 9px;border:1px solid var(--line);border-radius:7px}
+.actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+.err{color:var(--red);font-size:12.5px;margin-top:8px;min-height:1em}
+#login{max-width:340px;margin:60px auto;background:#fff;border:1px solid var(--line);border-radius:12px;padding:22px}
+.rules td input,.rules td select{padding:4px 6px;font-size:12.5px}
+.rules td input[type=number]{width:70px}
+.toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;padding:9px 16px;border-radius:8px;font-size:13px;z-index:20;display:none}
+@media (max-width:760px){
+  th{display:none}
+  table,tbody,tr,td{display:block;width:100%}
+  tr{border:1px solid var(--line);border-radius:9px;margin-bottom:8px;padding:6px 4px;background:#fff}
+  td{border:none;padding:3px 8px}
+  td[data-l]::before{content:attr(data-l) ": ";color:var(--muted);font-size:11.5px}
+  header{position:static}
+}
+</style>
+</head>
+<body>
+<div id="login" hidden>
+  <h2 style="margin-top:0">AFP Jobs &amp; KPIs</h2>
+  <p class="sub">Sign in with your Quote Portal name and PIN.</p>
+  <label for="lname">Name or email</label><input id="lname" type="text" autocomplete="username">
+  <label for="lpin">PIN</label><input id="lpin" type="password" inputmode="numeric" autocomplete="current-password">
+  <div class="err" id="lerr"></div>
+  <div class="actions"><button class="primary" id="lbtn">Sign in</button></div>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <h1>AFP Jobs &amp; KPIs</h1>
+    <span class="sync" id="sync"></span>
+    <span class="sp"></span>
+    <span class="sync" id="who"></span>
+    <button id="refresh" hidden>Refresh from AroFlo</button>
+    <button id="logout">Sign out</button>
+  </header>
+  <main>
+    <div class="tiles" id="tiles"></div>
+    <nav id="tabs"></nav>
+    <div class="panel" id="panel"></div>
+  </main>
+</div>
+
+<dialog id="dlgCallout"><form method="dialog" id="fCallout">
+  <h3>Callout before the job was received</h3>
+  <p class="sub" id="coJob"></p>
+  <p class="sub">Use this when we attended (for example an after-hours callout) before the client issued the work order. The attended time starts the KPI clock and counts as the response. It is logged with your name.</p>
+  <label for="coAt">Actual attendance date and time</label><input id="coAt" type="datetime-local" required>
+  <label for="coWhy">Reason / who called it in</label><textarea id="coWhy" rows="2" required placeholder="e.g. After-hours call from site security 9:40pm, WO issued next morning"></textarea>
+  <div class="err" id="coErr"></div>
+  <div class="actions"><button value="cancel" formnovalidate>Cancel</button><button class="primary" id="coSave" value="default">Save</button></div>
+</form></dialog>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+let token = null;
+try { token = localStorage.getItem('afp-token'); } catch (e) {}
+let data = null;
+let tab = 'action';
+try { tab = localStorage.getItem('afp-jobs-tab') || 'action'; } catch (e) {}
+const filters = { client: '', q: '', closedDays: '7' };
+const sel = new Set();
+
+async function api(path, opts = {}) {
+  const r = await fetch('/portal/' + path, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', 'x-portal-token': token || '', ...(opts.headers || {}) }
+  });
+  const j = await r.json().catch(() => ({ status: 'error', message: 'Bad response' }));
+  if (r.status === 401) { showLogin(); throw new Error('Signed out'); }
+  if (!r.ok || j.status !== 'ok') throw new Error(j.message || 'Request failed');
+  return j;
+}
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => (t.style.display = 'none'), 3500); }
+
+// ---------- time formatting (Sydney) ----------
+const fmt = new Intl.DateTimeFormat('en-AU', { timeZone: 'Australia/Sydney', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+const fd = (iso) => (iso ? fmt.format(new Date(iso)).replace(',', '') : '');
+function left(iso) {
+  if (!iso) return '';
+  let ms = new Date(iso) - Date.now();
+  const late = ms < 0; ms = Math.abs(ms);
+  const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000), d = Math.floor(h / 24);
+  const s = d >= 2 ? d + 'd' : h >= 1 ? h + 'h ' + m + 'm' : m + 'm';
+  return late ? s + ' late' : s + ' left';
+}
+const STATE = { met: 'Met', missed: 'Missed', overdue: 'Overdue', due_soon: 'Due soon', on_track: 'On track', no_kpi: 'No KPI', not_recorded: 'Not assigned' };
+function chip(leg, label) {
+  const extra = (leg.state === 'overdue' || leg.state === 'due_soon' || leg.state === 'on_track') && leg.dueAt ? ' · ' + left(leg.dueAt) : '';
+  const title = leg.dueAt ? 'Due ' + fd(leg.dueAt) + (leg.doneAt ? ' · done ' + fd(leg.doneAt) : '') : '';
+  return `<span class="chip ${leg.state}" title="${esc(title)}">${label} ${STATE[leg.state] || leg.state}${extra}</span>`;
+}
+const aroLink = (j) => j.webappId ? `https://office.aroflo.com/ims/Site/Service/workrequest/index.cfm?viewexist=1&wrCoded=${encodeURIComponent(j.webappId)}` : null;
+function jnCell(j) {
+  const u = aroLink(j);
+  return `<td class="jn" data-l="Job">${u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(j.jobNo)}</a>` : esc(j.jobNo)}<div class="sub">${esc(j.ref || '')}</div></td>`;
+}
+function jobCell(j) {
+  const tags = [];
+  if (j.callout) tags.push(`<span class="chip callout" title="${esc(j.calloutReason || '')} — set by ${esc(j.calloutBy || '')}">Callout</span>`);
+  if (j.priority && !j.ruleConfirmed) tags.push('<span class="chip unconf" title="KPI window not confirmed against the contract">KPI unconfirmed</span>');
+  return `<td data-l="Job details"><div>${esc(j.name)}</div><div class="sub">${esc(j.client)}${j.priority ? ' · ' + esc(j.priority) : ' · <b>No priority</b>'} ${tags.join(' ')}</div></td>`;
+}
+const isOpen = (j) => !j.completedAt;
+const isRisk = (j) => isOpen(j) && ['overdue', 'due_soon'].some((s) => j.respond.state === s || j.complete.state === s);
+
+// ---------- views ----------
+function visibleJobs() {
+  const q = filters.q.trim().toLowerCase();
+  return data.jobs.filter((j) => (!filters.client || j.client === filters.client) &&
+    (!q || [j.jobNo, j.ref, j.name, j.client, j.assignee, j.firstAssignedTo].join(' ').toLowerCase().includes(q)));
+}
+function queuedJobNos() { return new Set(data.queue.filter((x) => x.status === 'queued' || x.status === 'in_progress').map((x) => x.job_no)); }
+
+function counts() {
+  const qd = queuedJobNos();
+  const jobs = visibleJobs();
+  return {
+    action: jobs.filter(isRisk).length + jobs.filter((j) => j.portal && j.completedAt && !j.portalClosed && !qd.has(j.jobNo)).length,
+    risk: jobs.filter(isRisk).length,
+    ready: jobs.filter((j) => j.portal && j.completedAt && !j.portalClosed && !qd.has(j.jobNo)).length,
+    gaps: jobs.filter(gap).length,
+    queue: data.queue.filter((x) => x.status === 'queued' || x.status === 'in_progress' || x.status === 'needs_adrian').length
+  };
+}
+function gap(j) {
+  if (isOpen(j) && !j.priorityId) return 'No priority set in AroFlo';
+  if (isOpen(j) && !j.hasRule) return 'No KPI window for this priority';
+  if (j.completedAt && j.respond.state === 'not_recorded') return 'Completed with no technician assigned';
+  return '';
+}
+
+function renderTiles() {
+  const since = Date.now() - 30 * 86400000;
+  const byClient = new Map();
+  for (const j of data.jobs) {
+    if (!j.portal) continue;
+    const k = j.portalLabel;
+    if (!byClient.has(k)) byClient.set(k, { open: 0, risk: 0, ready: 0, met: 0, scored: 0 });
+    const t = byClient.get(k);
+    if (isOpen(j)) t.open++;
+    if (isRisk(j)) t.risk++;
+    if (j.completedAt && !j.portalClosed) t.ready++;
+    if (j.completedAt && new Date(j.completedAt) >= since) {
+      for (const leg of [j.respond, j.complete]) {
+        if (leg.state === 'met' || leg.state === 'missed') { t.scored++; if (leg.state === 'met') t.met++; }
+      }
+    }
+  }
+  $('#tiles').innerHTML = [...byClient.entries()].sort().map(([k, t]) => `
+    <div class="tile"><h3>${esc(k)}</h3>
+      <div class="row"><span>Open jobs</span><b>${t.open}</b></div>
+      <div class="row"><span>KPI at risk</span><b class="${t.risk ? 'r' : ''}">${t.risk}</b></div>
+      <div class="row"><span>Awaiting portal close-off</span><b class="${t.ready ? 'r' : ''}">${t.ready}</b></div>
+      <div class="row"><span>KPIs met, last 30 days</span><b>${t.scored ? Math.round((100 * t.met) / t.scored) + '%' : '–'}</b></div>
+    </div>`).join('');
+}
+
+function renderTabs() {
+  const c = counts();
+  const tabs = [['action', 'Needs action', c.action, true], ['open', 'All open'], ['closed', 'Recently closed'], ['queue', 'Close-off queue', c.queue], ['gaps', 'Data gaps', c.gaps, true], ['rules', 'KPI rules']];
+  $('#tabs').innerHTML = tabs.map(([k, l, n, r]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}${n !== undefined ? `<span class="n ${r && n ? 'r' : ''}">${n}</span>` : ''}</button>`).join('');
+}
+
+function filterBar(extra = '') {
+  const clients = [...new Set(data.jobs.map((j) => j.client).filter(Boolean))].sort();
+  return `<div class="bar">
+    <select id="fClient"><option value="">All clients</option>${clients.map((c) => `<option ${c === filters.client ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
+    <input id="fQ" type="text" placeholder="Search job, WR, site, tech" value="${esc(filters.q)}" style="min-width:200px">
+    ${extra}</div>`;
+}
+
+function riskTable(rows) {
+  if (!rows.length) return '<div class="empty">Nothing at risk right now.</div>';
+  rows.sort((a, b) => soonest(a) - soonest(b));
+  return `<table><thead><tr><th>Job</th><th>Details</th><th>Received</th><th>Assigned</th><th>KPI</th><th></th></tr></thead><tbody>${rows.map((j) => `<tr>
+    ${jnCell(j)}${jobCell(j)}
+    <td data-l="Received">${fd(j.clockStart)}${j.callout ? '<div class="sub">callout</div>' : ''}</td>
+    <td data-l="Assigned">${esc(j.assignee || j.firstAssignedTo || '—')}</td>
+    <td data-l="KPI">${chip(j.respond, 'Respond')} ${chip(j.complete, 'Complete')}</td>
+    <td>${calloutBtn(j)}</td></tr>`).join('')}</tbody></table>`;
+}
+function soonest(j) {
+  const t = [j.respond, j.complete].filter((l) => !l.doneAt && l.dueAt).map((l) => new Date(l.dueAt).getTime());
+  return t.length ? Math.min(...t) : Infinity;
+}
+function calloutBtn(j) { return j.callout ? (data.user.isAdmin || j.calloutBy === data.user.name ? `<button data-uncallout="${esc(j.jobNo)}" title="Remove callout backdate">Undo callout</button>` : '') : `<button data-callout="${esc(j.jobNo)}">Callout…</button>`; }
+
+function readyTable(rows) {
+  if (!rows.length) return '<div class="empty">Every completed job is closed off in its portal.</div>';
+  rows.sort((a, b) => (a.portalLabel || '').localeCompare(b.portalLabel || '') || new Date(a.completedAt) - new Date(b.completedAt));
+  return `<div class="bar"><button class="primary" id="queueSel" ${sel.size ? '' : 'disabled'}>Close off selected in portal (${sel.size})</button>
+    <button id="selAll">Select all shown</button><span class="sub">Queued jobs are closed by the close-off runner on Adrian's computer using the real AroFlo times.</span></div>
+    <table><thead><tr><th></th><th>Job</th><th>Details</th><th>Portal</th><th>Completed (first)</th><th>KPI</th></tr></thead><tbody>${rows.map((j) => `<tr>
+    <td><input type="checkbox" data-sel="${esc(j.jobNo)}" ${sel.has(j.jobNo) ? 'checked' : ''} aria-label="Select ${esc(j.jobNo)}"></td>
+    ${jnCell(j)}${jobCell(j)}
+    <td data-l="Portal">${esc(j.portalLabel)}</td>
+    <td data-l="Completed">${fd(j.completedAt)}${j.lastCompletedAt && j.lastCompletedAt !== j.completedAt ? `<div class="sub">re-closed ${fd(j.lastCompletedAt)}</div>` : ''}</td>
+    <td data-l="KPI">${chip(j.respond, 'Respond')} ${chip(j.complete, 'Complete')}</td></tr>`).join('')}</tbody></table>`;
+}
+
+function render() {
+  if (!data) return;
+  renderTiles(); renderTabs();
+  const jobs = visibleJobs();
+  const qd = queuedJobNos();
+  const p = $('#panel');
+  try { localStorage.setItem('afp-jobs-tab', tab); } catch (e) {}
+  if (tab === 'action') {
+    p.innerHTML = filterBar() +
+      '<h2>KPI at risk</h2><p class="hint">Open jobs that are overdue or close to their respond / complete KPI. Respond is met when a technician is first assigned.</p>' +
+      riskTable(jobs.filter(isRisk)) +
+      '<h2>Ready to close off in the client portal</h2><p class="hint">Completed in AroFlo, not yet closed in the portal.</p>' +
+      readyTable(jobs.filter((j) => j.portal && j.completedAt && !j.portalClosed && !qd.has(j.jobNo)));
+  } else if (tab === 'open') {
+    const rows = jobs.filter(isOpen).sort((a, b) => soonest(a) - soonest(b));
+    p.innerHTML = filterBar() + `<table><thead><tr><th>Job</th><th>Details</th><th>Received</th><th>Assigned</th><th>Status</th><th>KPI</th><th></th></tr></thead><tbody>${rows.map((j) => `<tr>
+      ${jnCell(j)}${jobCell(j)}<td data-l="Received">${fd(j.clockStart)}</td><td data-l="Assigned">${esc(j.assignee || j.firstAssignedTo || '—')}</td>
+      <td data-l="Status">${esc(j.status)}<div class="sub">${esc(j.substatus || '')}</div></td>
+      <td data-l="KPI">${chip(j.respond, 'Respond')} ${chip(j.complete, 'Complete')}</td><td>${calloutBtn(j)}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">No open jobs.</td></tr>'}</tbody></table>`;
+  } else if (tab === 'closed') {
+    const since = Date.now() - Number(filters.closedDays) * 86400000;
+    const rows = jobs.filter((j) => j.completedAt && new Date(j.completedAt) >= since).sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
+    p.innerHTML = filterBar(`<select id="fDays">${['1', '7', '14', '30'].map((d) => `<option value="${d}" ${d === filters.closedDays ? 'selected' : ''}>Last ${d} day${d === '1' ? '' : 's'}</option>`).join('')}</select>`) +
+      `<table><thead><tr><th>Job</th><th>Details</th><th>Received</th><th>First assigned</th><th>Completed (first)</th><th>KPI</th><th>Portal</th><th></th></tr></thead><tbody>${rows.map((j) => `<tr>
+      ${jnCell(j)}${jobCell(j)}<td data-l="Received">${fd(j.clockStart)}</td>
+      <td data-l="First assigned">${fd(j.respond.doneAt)}<div class="sub">${esc(j.firstAssignedTo || '')}</div></td>
+      <td data-l="Completed">${fd(j.completedAt)}</td>
+      <td data-l="KPI">${chip(j.respond, 'Respond')} ${chip(j.complete, 'Complete')}</td>
+      <td data-l="Portal">${j.portal ? (j.portalClosed ? `<span class="chip met">${esc(j.portalCloseValue)}</span>` : qd.has(j.jobNo) ? '<span class="chip q-queued">Queued</span>' : '<span class="chip overdue">Not closed</span>') : '<span class="sub">n/a</span>'}</td>
+      <td>${calloutBtn(j)}</td></tr>`).join('') || '<tr><td colspan="8" class="empty">No jobs closed in this period.</td></tr>'}</tbody></table>`;
+  } else if (tab === 'queue') {
+    const rows = data.queue;
+    p.innerHTML = '<p class="hint">Close-offs run on Adrian\'s computer each working hour while it is on. Items marked "Needs Adrian" are waiting on a portal login or a decision.</p>' +
+      `<table><thead><tr><th>Job</th><th>Portal</th><th>Status</th><th>Requested</th><th>Result</th><th></th></tr></thead><tbody>${rows.map((x) => `<tr>
+      <td data-l="Job" class="jn">${esc(x.job_no)}<div class="sub">${esc(x.custon || '')}</div></td>
+      <td data-l="Portal">${esc(portalName(x.portal))}</td>
+      <td data-l="Status"><span class="chip q-${esc(x.status)}">${esc(x.status.replace('_', ' '))}</span></td>
+      <td data-l="Requested">${fd(x.requested_at)}<div class="sub">${esc(x.requested_by)}</div></td>
+      <td data-l="Result">${esc(x.result || '')}${x.finished_at ? `<div class="sub">${fd(x.finished_at)}</div>` : ''}</td>
+      <td>${x.status === 'queued' ? `<button data-cancel="${esc(x.id)}">Cancel</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="empty">Queue is empty.</td></tr>'}</tbody></table>`;
+  } else if (tab === 'gaps') {
+    const rows = jobs.filter(gap);
+    p.innerHTML = filterBar() + '<p class="hint">These jobs can\'t be measured. Fix the priority in AroFlo (it flows through on the next refresh) or add the KPI window under KPI rules.</p>' +
+      `<table><thead><tr><th>Job</th><th>Details</th><th>Problem</th><th>Received</th></tr></thead><tbody>${rows.map((j) => `<tr>
+      ${jnCell(j)}${jobCell(j)}<td data-l="Problem">${esc(gap(j))}</td><td data-l="Received">${fd(j.receivedAt)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">No data gaps.</td></tr>'}</tbody></table>`;
+  } else if (tab === 'rules') {
+    renderRules(p);
+  }
+}
+const PORTAL_NAMES = { uos: 'UOS Archibus', unsw: 'UNSW Archibus', mywork_ausgrid: 'Downer Mywork (Ausgrid/Asahi)', mywork_defence: 'Downer Mywork (Defence)', bsafe: 'BGIS BSAFE' };
+const portalName = (k) => PORTAL_NAMES[k] || k;
+
+const UNITS = [['', '—'], ['minutes', 'minutes'], ['hours', 'hours'], ['calendar_days', 'calendar days'], ['business_days', 'working days'], ['next_working_day', 'next working day'], ['due_date', 'task due date']];
+function unitSel(v, dis) { return `<select ${dis}>${UNITS.map(([k, l]) => `<option value="${k}" ${k === (v || '') ? 'selected' : ''}>${l}</option>`).join('')}</select>`; }
+function renderRules(p) {
+  const admin = data.user.isAdmin;
+  const dis = admin ? '' : 'disabled';
+  p.innerHTML = `<p class="hint">Respond = first assignment to a technician (or callout attendance). Complete = first completion in AroFlo. ${admin ? 'Edit a row and press Save. Tick Confirmed once checked against the contract.' : 'Only admins can edit.'}</p>
+    <table class="rules"><thead><tr><th>Priority</th><th>Client</th><th>Respond</th><th>Complete</th><th>Confirmed</th><th>Notes</th><th></th></tr></thead><tbody>${data.rules.map((r) => `<tr data-rule="${r.id}">
+    <td data-l="Priority"><input type="text" value="${esc(r.label)}" data-f="label" ${dis}></td>
+    <td data-l="Client">${esc(r.client || 'Any')}</td>
+    <td data-l="Respond"><input type="number" min="0" step="any" value="${r.respond.value ?? ''}" data-f="respondValue" ${dis}> <span data-f="respondUnit">${unitSel(r.respond.unit, dis)}</span></td>
+    <td data-l="Complete"><input type="number" min="0" step="any" value="${r.complete.value ?? ''}" data-f="completeValue" ${dis}> <span data-f="completeUnit">${unitSel(r.complete.unit, dis)}</span></td>
+    <td data-l="Confirmed"><input type="checkbox" data-f="confirmed" ${r.confirmed ? 'checked' : ''} ${dis}></td>
+    <td data-l="Notes"><input type="text" value="${esc(r.notes)}" data-f="notes" ${dis}><div class="sub">${esc(r.updatedBy || '')} ${fd(r.updatedAt)}</div></td>
+    <td>${admin ? '<button data-saverule>Save</button>' : ''}</td></tr>`).join('')}</tbody></table>`;
+}
+
+// ---------- events ----------
+document.addEventListener('click', async (e) => {
+  const t = e.target.closest('button,input[type=checkbox]');
+  if (!t) return;
+  if (t.dataset.tab) { tab = t.dataset.tab; render(); return; }
+  if (t.dataset.sel !== undefined) { t.checked ? sel.add(t.dataset.sel) : sel.delete(t.dataset.sel); const b = $('#queueSel'); if (b) { b.disabled = !sel.size; b.textContent = `Close off selected in portal (${sel.size})`; } return; }
+  if (t.id === 'selAll') { document.querySelectorAll('[data-sel]').forEach((c) => { c.checked = true; sel.add(c.dataset.sel); }); render(); return; }
+  if (t.id === 'queueSel') {
+    t.disabled = true;
+    try {
+      const r = await api('kpi/closeoff', { method: 'POST', body: JSON.stringify({ jobNos: [...sel] }) });
+      const ok = r.results.filter((x) => x.queued).length;
+      const bad = r.results.filter((x) => !x.queued).map((x) => `${x.jobNo} (${x.reason})`);
+      sel.clear();
+      toast(`${ok} queued for close-off${bad.length ? '. Not queued: ' + bad.join(', ') : ''}`);
+      await load();
+    } catch (err) { toast(err.message); t.disabled = false; }
+    return;
+  }
+  if (t.dataset.cancel) { try { await api('kpi/closeoff/' + t.dataset.cancel, { method: 'DELETE' }); toast('Cancelled'); await load(); } catch (err) { toast(err.message); } return; }
+  if (t.dataset.callout) { openCallout(t.dataset.callout); return; }
+  if (t.dataset.uncallout) {
+    if (!confirm(`Remove the callout backdate on job ${t.dataset.uncallout}?`)) return;
+    try { await api('kpi/callout/' + t.dataset.uncallout, { method: 'DELETE' }); toast('Callout removed'); await load(); } catch (err) { toast(err.message); }
+    return;
+  }
+  if (t.hasAttribute('data-saverule')) {
+    const tr = t.closest('tr');
+    const g = (f) => tr.querySelector(`[data-f="${f}"]`);
+    const body = { label: g('label').value, respondValue: g('respondValue').value, respondUnit: g('respondUnit').querySelector('select').value,
+      completeValue: g('completeValue').value, completeUnit: g('completeUnit').querySelector('select').value, confirmed: g('confirmed').checked, notes: g('notes').value };
+    try { await api('kpi/rules/' + tr.dataset.rule, { method: 'PUT', body: JSON.stringify(body) }); toast('Saved'); await load(); } catch (err) { toast(err.message); }
+    return;
+  }
+  if (t.id === 'refresh') {
+    t.disabled = true; t.textContent = 'Refreshing…';
+    try { const r = await api('kpi/sync', { method: 'POST' }); toast(`Refreshed: ${r.open} open, ${r.completed} recently completed`); await load(); }
+    catch (err) { toast(err.message); }
+    t.disabled = false; t.textContent = 'Refresh from AroFlo';
+    return;
+  }
+  if (t.id === 'logout') { try { await api('logout', { method: 'POST' }); } catch (err) {} try { localStorage.removeItem('afp-token'); } catch (e2) {} token = null; showLogin(); }
+});
+document.addEventListener('input', (e) => {
+  if (e.target.id === 'fQ') { filters.q = e.target.value; const pos = e.target.selectionStart; render(); const el = $('#fQ'); if (el) { el.focus(); el.setSelectionRange(pos, pos); } }
+});
+document.addEventListener('change', (e) => {
+  if (e.target.id === 'fClient') { filters.client = e.target.value; render(); }
+  if (e.target.id === 'fDays') { filters.closedDays = e.target.value; render(); }
+});
+
+// ---------- callout dialog ----------
+let coJob = null;
+function openCallout(jobNo) {
+  const j = data.jobs.find((x) => x.jobNo === jobNo);
+  coJob = jobNo;
+  $('#coJob').textContent = `Job ${jobNo} · ${j ? j.name : ''} · received ${j ? fd(j.receivedAt) : ''}`;
+  $('#coAt').value = ''; $('#coWhy').value = ''; $('#coErr').textContent = '';
+  $('#dlgCallout').showModal();
+}
+$('#coSave').addEventListener('click', async (e) => {
+  e.preventDefault();
+  const at = $('#coAt').value, why = $('#coWhy').value.trim();
+  if (!at || why.length < 5) { $('#coErr').textContent = 'Enter the attendance time and a reason.'; return; }
+  try {
+    await api('kpi/callout', { method: 'POST', body: JSON.stringify({ jobNo: coJob, attendedAt: at, reason: why }) });
+    $('#dlgCallout').close(); toast('Callout saved'); await load();
+  } catch (err) { $('#coErr').textContent = err.message; }
+});
+
+// ---------- login / load ----------
+function showLogin() { $('#app').hidden = true; $('#login').hidden = false; }
+$('#lbtn').addEventListener('click', async () => {
+  $('#lerr').textContent = '';
+  try {
+    const r = await fetch('/portal/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: $('#lname').value, pin: $('#lpin').value }) });
+    const j = await r.json();
+    if (!r.ok || j.status !== 'ok') throw new Error(j.message || 'Sign in failed');
+    token = j.token; try { localStorage.setItem('afp-token', token); } catch (e) {}
+    await load();
+  } catch (err) { $('#lerr').textContent = err.message; }
+});
+$('#lpin').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#lbtn').click(); });
+
+async function load() {
+  if (!token) return showLogin();
+  data = await api('kpi/summary');
+  $('#login').hidden = true; $('#app').hidden = false;
+  $('#who').textContent = data.user.name;
+  $('#refresh').hidden = !data.user.isAdmin;
+  const s = data.sync;
+  $('#sync').textContent = s && s.last_ok_at ? 'AroFlo data as at ' + fd(s.last_ok_at) + (s.last_error ? ' · last refresh failed' : '') : 'Waiting for first AroFlo refresh';
+  render();
+}
+load().catch(() => {});
+setInterval(() => { if (token && !document.hidden && !document.querySelector('dialog[open]')) load().catch(() => {}); }, 5 * 60000);
+})();
+</script>
+</body>
+</html>

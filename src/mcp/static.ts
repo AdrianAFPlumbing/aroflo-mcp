@@ -11,7 +11,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // dist/mcp/static.js -> ../../public/portal.html
 const PORTAL_PATH = join(__dirname, '..', '..', 'public', 'portal.html');
 
+const JOBS_PATH = join(__dirname, '..', '..', 'public', 'jobs.html');
+
 let cached: string | null = null;
+let cachedJobs: string | null = null;
 
 async function loadPortal(): Promise<string | null> {
   if (cached) return cached;
@@ -24,12 +27,30 @@ async function loadPortal(): Promise<string | null> {
   }
 }
 
+async function loadJobs(): Promise<string | null> {
+  if (cachedJobs) return cachedJobs;
+  try {
+    cachedJobs = await readFile(JOBS_PATH, 'utf8');
+    return cachedJobs;
+  } catch (err) {
+    logger.warn({ err, path: JOBS_PATH }, 'jobs.html not found');
+    return null;
+  }
+}
+
 /** Serve the portal HTML at "/" and "/portal-app". Returns true if handled. */
 export async function handleStatic(
   _req: IncomingMessage,
   res: ServerResponse,
   pathname: string
 ): Promise<boolean> {
+  // KPI & portal close-off dashboard (same login as the Quote Portal).
+  if (pathname === '/jobs' || pathname === '/jobs/' || pathname === '/kpi') {
+    const jobs = await loadJobs();
+    res.writeHead(jobs ? 200 : 404, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
+    res.end(jobs ?? 'Dashboard not deployed');
+    return true;
+  }
   if (pathname !== '/' && pathname !== '/portal-app' && pathname !== '/index.html') return false;
 
   const html = await loadPortal();
