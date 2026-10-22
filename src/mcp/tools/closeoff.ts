@@ -34,6 +34,13 @@ export function registerCloseoffTools(server: McpServer): void {
           `UPDATE kpi_closeoffs SET status = 'queued', claimed_at = NULL
             WHERE status = 'in_progress' AND claimed_at < now() - interval '3 hours'`
         );
+        // Skip anything already recorded as closed in the portal (e.g. by a later portal export).
+        await query(
+          `UPDATE kpi_closeoffs c SET status = 'skipped', finished_at = now(),
+                  result = 'Already closed in portal (' || j.portal_close_value || ')'
+             FROM kpi_jobs j
+            WHERE c.job_no = j.job_no AND c.status = 'queued' AND COALESCE(j.portal_close_value,'') <> ''`
+        );
         const rows = await query<any>(
           `UPDATE kpi_closeoffs SET status = 'in_progress', claimed_at = now(), attempts = attempts + 1
             WHERE id IN (
