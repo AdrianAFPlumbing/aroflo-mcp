@@ -106,11 +106,16 @@ export async function handleKpi(
         ORDER BY requested_at DESC LIMIT 400`
     );
     const sync = await query<any>('SELECT last_run_at, last_ok_at, last_error, detail FROM kpi_sync_state WHERE id = 1');
+    const baselines = await query<any>(
+      `SELECT DISTINCT ON (detail->>'portal') detail->>'portal' AS portal, detail->>'exportDate' AS export_date, at, by_name
+         FROM kpi_audit WHERE action = 'portal_baseline' ORDER BY detail->>'portal', at DESC`
+    );
     return send(res, 200, {
       status: 'ok',
       now: now.toISOString(),
       user: { name: user.name, isAdmin: user.is_admin },
       sync: sync[0] ?? null,
+      baselines,
       rules,
       jobs,
       queue

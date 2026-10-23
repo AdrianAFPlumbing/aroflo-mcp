@@ -4,110 +4,261 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>AFP Jobs &amp; KPIs</title>
+<link rel="icon" href="/logo.png">
 <style>
 :root{
-  --navy:#0B2A4E;--navy2:#123a66;--bg:#f3f5f8;--card:#fff;--ink:#14202e;--muted:#5d6b7c;--line:#dde3ea;
-  --red:#c62828;--redbg:#fdecea;--amber:#a15c00;--amberbg:#fff4e0;--green:#1b7a3a;--greenbg:#e6f4ea;--grey:#6b7785;--greybg:#eef1f4;--blue:#1d5fa8;--bluebg:#e7f0fb;
+  color-scheme:light dark;
+  --acc:#095da5;--acc-ink:#fff;--acc-soft:#e6f0fa;--acc-line:#b9d3ef;
+  --fg:#1b1f24;--mut:#5b636d;--bg:#f5f6f8;--card:#fff;--line:#e0e3e8;--hover:#f0f3f7;
+  --ok:#1a7f37;--ok-bg:#e8f5ec;--warn:#9a6700;--warn-bg:#fff3d6;--bad:#cf222e;--bad-bg:#fdecec;
+  --grey:#6b7785;--grey-bg:#eef1f4;--purple:#6639ba;--purple-bg:#efe7fb;
+  --serif:Georgia,"Times New Roman",serif;--sans:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;
+  --r:12px;--shadow:0 1px 2px rgba(27,31,36,.06),0 4px 14px rgba(27,31,36,.05);
 }
+@media (prefers-color-scheme:dark){:root{
+  --acc:#4c9be8;--acc-ink:#0b1a2a;--acc-soft:#14263a;--acc-line:#24466b;
+  --fg:#e6e8eb;--mut:#9aa3ad;--bg:#111418;--card:#1a1f25;--line:#2c333b;--hover:#20262e;
+  --ok:#56d364;--ok-bg:#12271a;--warn:#e3b341;--warn-bg:#2d2410;--bad:#f85149;--bad-bg:#3a1a1c;
+  --grey:#9aa3ad;--grey-bg:#242a31;--purple:#c297ff;--purple-bg:#2a1f3d;--shadow:none;
+}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-header{background:var(--navy);color:#fff;padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;position:sticky;top:0;z-index:5}
-header h1{font-size:17px;margin:0;font-weight:650}
-header .sync{font-size:12px;opacity:.8}
-header .sp{flex:1}
-header button{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25)}
-button{font:inherit;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:7px;padding:6px 12px;cursor:pointer}
-button.primary{background:var(--navy);border-color:var(--navy);color:#fff}
-button:disabled{opacity:.5;cursor:default}
-nav{display:flex;gap:4px;padding:10px 16px 0;overflow-x:auto;background:var(--bg)}
-nav button{border:none;background:none;padding:8px 12px;border-radius:7px 7px 0 0;color:var(--muted);white-space:nowrap}
-nav button.on{background:var(--card);color:var(--ink);font-weight:600;box-shadow:0 -1px 0 var(--line) inset}
-nav .n{display:inline-block;min-width:18px;padding:0 5px;margin-left:4px;border-radius:9px;background:var(--greybg);font-size:11px;text-align:center}
-nav .n.r{background:var(--redbg);color:var(--red)}
-main{padding:0 16px 40px;max-width:1300px;margin:0 auto}
-.panel{background:var(--card);border:1px solid var(--line);border-radius:0 10px 10px 10px;padding:14px}
-.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin:14px 0}
-.tile{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
-.tile h3{margin:0 0 6px;font-size:13px}
-.tile .row{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
-.tile .row b{color:var(--ink)}
-.tile .row b.r{color:var(--red)}
-.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
-.bar select,.bar input{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:#fff}
-h2{font-size:15px;margin:16px 0 8px}
-h2:first-child{margin-top:2px}
-.hint{color:var(--muted);font-size:12px;margin:-4px 0 8px}
-table{width:100%;border-collapse:collapse}
-th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
-th{font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);font-weight:600;background:#fafbfc;position:sticky;top:56px}
-td.jn a{font-weight:650;color:var(--blue);text-decoration:none}
-.sub{color:var(--muted);font-size:12px}
-.chip{display:inline-block;padding:1px 7px;border-radius:9px;font-size:11.5px;font-weight:600;white-space:nowrap}
-.met{background:var(--greenbg);color:var(--green)}
-.missed,.overdue{background:var(--redbg);color:var(--red)}
-.due_soon{background:var(--amberbg);color:var(--amber)}
-.on_track{background:var(--bluebg);color:var(--blue)}
-.no_kpi,.not_recorded{background:var(--greybg);color:var(--grey)}
-.callout{background:#efe7fb;color:#5b2ea6}
-.unconf{background:var(--amberbg);color:var(--amber)}
-.empty{padding:18px;color:var(--muted);text-align:center}
-.q-queued{background:var(--bluebg);color:var(--blue)}
-.q-in_progress{background:var(--amberbg);color:var(--amber)}
-.q-done{background:var(--greenbg);color:var(--green)}
-.q-failed,.q-needs_adrian{background:var(--redbg);color:var(--red)}
-.q-skipped,.q-cancelled{background:var(--greybg);color:var(--grey)}
-dialog{border:none;border-radius:12px;padding:0;max-width:440px;width:calc(100% - 32px)}
-dialog::backdrop{background:rgba(11,42,78,.45)}
-dialog form{padding:18px}
-dialog h3{margin:0 0 10px}
-label{display:block;font-size:12px;color:var(--muted);margin:10px 0 3px}
-input[type=text],input[type=password],input[type=datetime-local],input[type=number],textarea,select{width:100%;font:inherit;padding:7px 9px;border:1px solid var(--line);border-radius:7px}
-.actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
-.err{color:var(--red);font-size:12.5px;margin-top:8px;min-height:1em}
-#login{max-width:340px;margin:60px auto;background:#fff;border:1px solid var(--line);border-radius:12px;padding:22px}
-.rules td input,.rules td select{padding:4px 6px;font-size:12.5px}
-.rules td input[type=number]{width:70px}
-.toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;padding:9px 16px;border-radius:8px;font-size:13px;z-index:20;display:none}
+[hidden]{display:none!important}
+html,body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 var(--sans)}
+a{color:var(--acc)}
+button{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:9px;padding:7px 13px;cursor:pointer;line-height:1.2}
+button:hover{background:var(--hover)}
+button.primary{background:var(--acc);border-color:var(--acc);color:var(--acc-ink);font-weight:600}
+button.primary:hover{filter:brightness(1.08)}
+button.quiet{background:none;border-color:transparent;color:var(--acc);padding:4px 8px}
+button.quiet:hover{background:var(--acc-soft)}
+button.small{padding:4px 10px;font-size:12.5px;border-radius:7px}
+button:disabled{opacity:.5;cursor:default;filter:none}
+input,select,textarea{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:9px;padding:7px 10px}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+h1,h2,h3{font-family:var(--serif);font-weight:400;margin:0}
+.mut{color:var(--mut)}
+.small{font-size:12.5px}
+
+/* ---------- header ---------- */
+.top{background:var(--card);border-bottom:1px solid var(--line);border-top:5px solid var(--acc)}
+.top .in{max-width:1240px;margin:0 auto;padding:12px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.top img{height:48px;width:48px;object-fit:contain}
+.top h1{font-size:24px;line-height:1.1}
+.top .brand .mut{font-size:12.5px;margin-top:2px}
+.top .sp{flex:1}
+.top .right{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;color:var(--mut)}
+.top .right .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);display:inline-block;margin-right:5px}
+.top .right .dot.stale{background:var(--warn)}
+.top .right .dot.bad{background:var(--bad)}
+
+main{max-width:1240px;margin:0 auto;padding:18px 20px 110px}
+
+/* ---------- overview ---------- */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:14px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;box-shadow:var(--shadow);cursor:pointer;text-align:left;display:block;width:100%}
+.stat:hover{border-color:var(--acc-line);background:var(--card)}
+.stat .n{font-family:var(--serif);font-size:38px;line-height:1;margin:2px 0 6px}
+.stat .l{font-size:13px;color:var(--mut)}
+.stat .d{font-size:12px;color:var(--mut);margin-top:4px;min-height:1.2em}
+.stat.bad .n{color:var(--bad)}
+.stat.warn .n{color:var(--warn)}
+.stat.acc .n{color:var(--acc)}
+.stat.ok .n{color:var(--ok)}
+
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0 14px}
+.toolbar input[type=search]{flex:1;min-width:220px}
+.toolbar .sp{flex:1}
+
+.portals{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);margin-bottom:14px;overflow-x:auto}
+.portals table{min-width:560px}
+.portals table{width:100%;border-collapse:collapse}
+.portals th,.portals td{padding:8px 14px;text-align:right;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
+.portals th{font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--mut);font-weight:600;border-top:none;background:var(--bg)}
+.portals th:first-child,.portals td:first-child{text-align:left}
+.portals td.r{color:var(--bad);font-weight:600}
+.portals td.w{color:var(--warn);font-weight:600}
+.portals .bar{height:6px;border-radius:3px;background:var(--grey-bg);overflow:hidden;min-width:70px;display:inline-block;vertical-align:middle;margin-left:8px}
+.portals .bar i{display:block;height:100%;background:var(--ok)}
+.portals .bar i.mid{background:var(--warn)}
+.portals .bar i.low{background:var(--bad)}
+.portals tr.dim td{color:var(--mut)}
+.portals tr.dim td.r,.portals tr.dim td.w{color:inherit;font-weight:400}
+
+/* ---------- sections ---------- */
+.sec{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);margin-bottom:12px;overflow:hidden}
+.sec.attn{border-left:4px solid var(--bad)}
+.sec.attn-warn{border-left:4px solid var(--warn)}
+.sec-h{display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;user-select:none}
+.sec-h:hover{background:var(--hover)}
+.sec-h h2{font-size:19px;display:flex;align-items:center;gap:10px;white-space:nowrap}
+.badge{display:inline-block;min-width:22px;padding:1px 8px;border-radius:11px;font:600 12px/18px var(--sans);text-align:center;background:var(--grey-bg);color:var(--grey)}
+.badge.bad{background:var(--bad-bg);color:var(--bad)}
+.badge.warn{background:var(--warn-bg);color:var(--warn)}
+.badge.acc{background:var(--acc-soft);color:var(--acc)}
+.badge.ok{background:var(--ok-bg);color:var(--ok)}
+.sec-h .sum{flex:1;color:var(--mut);font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sec-h .tog{white-space:nowrap}
+.sec-b{border-top:1px solid var(--line);padding:12px 16px 16px}
+.sec-b .hint{color:var(--mut);font-size:12.5px;margin:0 0 10px}
+.sec-b .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.sec-b .row .sp{flex:1}
+
+/* ---------- tables ---------- */
+table.t{width:100%;border-collapse:collapse}
+.t th,.t td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+.t th{font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--mut);font-weight:600;background:var(--bg)}
+.t tr:hover td{background:var(--hover)}
+.t td.jn{white-space:nowrap}
+.t td.jn a{font-weight:650;text-decoration:none}
+.t td.jn a:hover{text-decoration:underline}
+.t .sub{color:var(--mut);font-size:12px;margin-top:1px}
+.t td.num{white-space:nowrap;font-variant-numeric:tabular-nums}
+.t td.ck{width:34px;padding-right:0}
+.t input[type=checkbox]{width:17px;height:17px;accent-color:var(--acc);cursor:pointer}
+.empty{padding:22px;color:var(--mut);text-align:center}
+.more{display:flex;justify-content:center;padding:10px 0 2px}
+
+/* KPI pills */
+.kpi{display:inline-flex;align-items:center;gap:5px;padding:2px 8px 2px 6px;border-radius:9px;font-size:12px;font-weight:600;white-space:nowrap;background:var(--grey-bg);color:var(--grey);margin:1px 4px 1px 0}
+.kpi i{width:7px;height:7px;border-radius:50%;background:currentColor;display:inline-block}
+.kpi b{font-weight:600;opacity:.75}
+.kpi.met,.kpi.on_track{background:var(--ok-bg);color:var(--ok)}
+.kpi.on_track{background:var(--acc-soft);color:var(--acc)}
+.kpi.due_soon{background:var(--warn-bg);color:var(--warn)}
+.kpi.missed,.kpi.overdue{background:var(--bad-bg);color:var(--bad)}
+.tag{display:inline-block;padding:1px 7px;border-radius:8px;font-size:11.5px;font-weight:600;white-space:nowrap}
+.tag.callout{background:var(--purple-bg);color:var(--purple)}
+.tag.unconf{background:var(--warn-bg);color:var(--warn)}
+.tag.q-queued{background:var(--acc-soft);color:var(--acc)}
+.tag.q-in_progress{background:var(--warn-bg);color:var(--warn)}
+.tag.q-done,.tag.ok{background:var(--ok-bg);color:var(--ok)}
+.tag.q-needs_adrian,.tag.q-failed,.tag.bad{background:var(--bad-bg);color:var(--bad)}
+.tag.q-skipped,.tag.q-cancelled,.tag.grey{background:var(--grey-bg);color:var(--grey)}
+
+.notice{display:flex;gap:10px;align-items:center;background:var(--ok-bg);color:var(--ok);border:1px solid color-mix(in srgb,var(--ok) 30%,transparent);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-weight:600}
+.notice.warn{background:var(--warn-bg);color:var(--warn);border-color:color-mix(in srgb,var(--warn) 30%,transparent)}
+.notice .sp{flex:1}
+.needs{background:var(--bad-bg);border:1px solid color-mix(in srgb,var(--bad) 30%,transparent);border-radius:10px;padding:10px 12px;margin-bottom:12px}
+.needs h3{font-family:var(--sans);font-size:13.5px;font-weight:700;color:var(--bad);margin-bottom:6px}
+.needs ul{margin:0;padding-left:18px}
+.needs li{margin:2px 0}
+
+/* selection bar */
+.selbar{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);background:var(--fg);color:var(--bg);border-radius:14px;padding:10px 12px 10px 18px;display:none;align-items:center;gap:12px;box-shadow:0 8px 28px rgba(0,0,0,.28);z-index:20;max-width:calc(100% - 32px)}
+.selbar.on{display:flex}
+.selbar b{font-size:15px}
+.selbar button{border-color:transparent}
+.selbar .primary{background:var(--acc);color:#fff}
+.selbar .quiet{color:var(--bg);background:none}
+.selbar .quiet:hover{background:rgba(255,255,255,.12)}
+@media (prefers-color-scheme:dark){.selbar{background:#e6e8eb;color:#111418}.selbar .quiet{color:#111418}}
+
+/* exports steps */
+.steps{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.step{border:1px solid var(--line);border-radius:10px;padding:12px}
+.step h3{font-family:var(--sans);font-size:13px;font-weight:700;margin-bottom:8px}
+.step h3 span{display:inline-block;width:22px;height:22px;border-radius:50%;background:var(--acc);color:var(--acc-ink);text-align:center;line-height:22px;font-size:12px;margin-right:8px}
+.chk{display:flex;flex-wrap:wrap;gap:6px}
+.chk label{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:20px;padding:4px 10px;cursor:pointer;font-size:13px}
+.chk label:has(input:checked){background:var(--acc-soft);border-color:var(--acc-line);color:var(--acc)}
+.chk input{accent-color:var(--acc)}
+.drop{border:2px dashed var(--line);border-radius:10px;padding:14px;text-align:center;color:var(--mut);cursor:pointer}
+.drop:hover,.drop.over{border-color:var(--acc);background:var(--acc-soft);color:var(--acc)}
+.drop input{display:none}
+.lastload{font-size:12.5px;color:var(--mut);margin-top:8px}
+
+/* rules + users */
+.t.edit td input[type=text],.t.edit td input[type=number],.t.edit td input[type=password],.t.edit td select{padding:5px 7px;font-size:13px}
+.t.edit td input[type=number]{width:68px}
+.t.edit td.w100 input{width:100%}
+.group{background:var(--bg)!important;font-weight:600}
+
+/* dialog + login */
+dialog{border:none;border-radius:14px;padding:0;max-width:460px;width:calc(100% - 32px);background:var(--card);color:var(--fg);box-shadow:0 20px 60px rgba(0,0,0,.3)}
+dialog::backdrop{background:rgba(9,20,34,.5)}
+dialog form{padding:20px 22px}
+dialog h3{font-size:20px;margin-bottom:6px}
+dialog label{display:block;font-size:12.5px;color:var(--mut);margin:12px 0 4px}
+dialog input,dialog textarea{width:100%}
+.actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+.err{color:var(--bad);font-size:12.5px;margin-top:8px;min-height:1em}
+#login{min-height:100vh;display:grid;place-items:center;padding:16px}
+#login form{background:var(--card);border:1px solid var(--line);border-top:6px solid var(--acc);border-radius:14px;padding:30px 28px;width:100%;max-width:380px}
+#login img{height:84px;display:block;margin:0 auto 12px}
+#login h1{font-size:26px;margin-bottom:2px}
+#login p{color:var(--mut);font-size:13.5px;margin:0 0 16px}
+#login input{width:100%;padding:11px 13px;margin-bottom:10px;font-size:16px}
+#login button{width:100%;padding:11px;font-size:15px}
+.toast{position:fixed;top:14px;left:50%;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:9px;font-size:13px;z-index:30;display:none;max-width:calc(100% - 32px)}
+
+/* mobile */
 @media (max-width:760px){
-  th{display:none}
-  table,tbody,tr,td{display:block;width:100%}
-  tr{border:1px solid var(--line);border-radius:9px;margin-bottom:8px;padding:6px 4px;background:#fff}
-  td{border:none;padding:3px 8px}
-  td[data-l]::before{content:attr(data-l) ": ";color:var(--muted);font-size:11.5px}
-  header{position:static}
+  .top .in{padding:10px 14px}
+  main{padding:12px 14px 120px}
+  .sec-h{flex-wrap:wrap}
+  .sec-h .sum{flex-basis:100%;white-space:normal;order:3}
+  .t thead{display:none}
+  .t,.t tbody,.t tr,.t td{display:block;width:100%}
+  .t tr{border:1px solid var(--line);border-radius:10px;margin-bottom:8px;padding:8px 4px;background:var(--card)}
+  .t tr:hover td{background:none}
+  .t td{border:none;padding:3px 8px}
+  .t td[data-l]::before{content:attr(data-l) ": ";color:var(--mut);font-size:11.5px}
+  .t td.ck{width:auto;float:right;padding:0 8px}
+  .portals th,.portals td{padding:7px 8px;font-size:13px;white-space:nowrap}
 }
 </style>
 </head>
 <body>
 <div id="login" hidden>
-  <h2 style="margin-top:0">AFP Jobs &amp; KPIs</h2>
-  <p class="sub">Sign in with your name and PIN.</p>
-  <label for="lname">Name or email</label><input id="lname" type="text" autocomplete="username">
-  <label for="lpin">PIN</label><input id="lpin" type="password" inputmode="numeric" autocomplete="current-password">
-  <div class="err" id="lerr"></div>
-  <div class="actions"><button class="primary" id="lbtn">Sign in</button></div>
+  <form id="loginForm" autocomplete="on">
+    <img src="/logo.png" alt="Australian Facilities Plumbing" onerror="this.remove()">
+    <h1>Jobs &amp; KPIs</h1>
+    <p>Plumbing Sydney · Australian Facilities Plumbing</p>
+    <input id="lname" type="text" placeholder="Name or email" autocomplete="username" required>
+    <input id="lpin" type="password" placeholder="PIN" inputmode="numeric" autocomplete="current-password" required>
+    <button class="primary" id="lbtn" type="submit">Sign in</button>
+    <div class="err" id="lerr"></div>
+  </form>
 </div>
 
 <div id="app" hidden>
-  <header>
-    <h1>AFP Jobs &amp; KPIs</h1>
-    <span class="sync" id="sync"></span>
-    <span class="sp"></span>
-    <span class="sync" id="who"></span>
-    <button id="refresh" hidden>Refresh from AroFlo</button>
-    <button id="logout">Sign out</button>
-  </header>
+  <header class="top"><div class="in">
+    <img src="/logo.png" alt="" onerror="this.remove()">
+    <div class="brand"><h1>Jobs &amp; KPIs</h1><div class="mut">Plumbing Sydney · Australian Facilities Plumbing</div></div>
+    <div class="sp"></div>
+    <div class="right">
+      <span id="sync"></span>
+      <button class="small" id="refresh" hidden>Refresh from AroFlo</button>
+      <span id="who"></span>
+      <button class="small" id="logout">Sign out</button>
+    </div>
+  </div></header>
+
   <main>
-    <div class="tiles" id="tiles"></div>
-    <nav id="tabs"></nav>
-    <div class="panel" id="panel"></div>
+    <div id="noticeBox"></div>
+    <div class="stats" id="stats"></div>
+    <div class="toolbar">
+      <select id="fClient" aria-label="Client"></select>
+      <input id="fQ" type="search" placeholder="Search job number, WR / order number, site or technician">
+      <span class="sp"></span>
+      <button class="small" id="expandAll">Open all</button>
+      <button class="small" id="collapseAll">Close all</button>
+    </div>
+    <div class="portals" id="portals"></div>
+    <div id="sections"></div>
   </main>
+
+  <div class="selbar" id="selbar">
+    <b id="selCount">0 selected</b>
+    <button class="primary" id="queueSel">Close off in portal</button>
+    <button class="quiet" id="selClear">Clear</button>
+  </div>
 </div>
 
-<dialog id="dlgCallout"><form method="dialog" id="fCallout">
+<dialog id="dlgCallout"><form method="dialog">
   <h3>Callout before the job was received</h3>
-  <p class="sub" id="coJob"></p>
-  <p class="sub">Use this when we attended (for example an after-hours callout) before the client issued the work order. The attended time starts the KPI clock and counts as the response. It is logged with your name.</p>
+  <div class="mut small" id="coJob"></div>
+  <p class="mut small" style="margin:10px 0 0">For jobs we attended (for example an after-hours callout) before the client issued the work order. The attended time starts the KPI clock and counts as the response. It's logged against your name.</p>
   <label for="coAt">Actual attendance date and time</label><input id="coAt" type="datetime-local" required>
   <label for="coWhy">Reason / who called it in</label><textarea id="coWhy" rows="2" required placeholder="e.g. After-hours call from site security 9:40pm, WO issued next morning"></textarea>
   <div class="err" id="coErr"></div>
@@ -119,232 +270,268 @@ input[type=text],input[type=password],input[type=datetime-local],input[type=numb
 <script>
 (() => {
 const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-let token = null;
-try { token = localStorage.getItem('afp-token'); } catch (e) {}
-let data = null;
-let tab = 'action';
-try { tab = localStorage.getItem('afp-jobs-tab') || 'action'; } catch (e) {}
-const filters = { client: '', q: '', closedDays: '7' };
-const sel = new Set();
-let notice = '';
+const ls = { get: (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }, set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
 
+let token = ls.get('afp-token', null);
+let data = null;
+const filters = { client: ls.get('afp-f-client', ''), q: '' };
+let open = new Set(ls.get('afp-open', []));
+const show = {};            // per-section row limit
+const PAGE = 60;
+const sel = new Set();
+let notice = null;          // {text, kind}
+let closedDays = ls.get('afp-closed-days', '7');
+let queueShowDone = false;
+
+// ---------- api ----------
 async function api(path, opts = {}) {
-  const r = await fetch('/portal/' + path, {
-    ...opts,
-    headers: { 'Content-Type': 'application/json', 'x-portal-token': token || '', ...(opts.headers || {}) }
-  });
-  const j = await r.json().catch(() => ({ status: 'error', message: 'Bad response' }));
+  const r = await fetch('/portal/' + path, { ...opts, headers: { 'Content-Type': 'application/json', 'x-portal-token': token || '', ...(opts.headers || {}) } });
+  const j = await r.json().catch(() => ({ status: 'error', message: 'Bad response from server' }));
   if (r.status === 401) { showLogin(); throw new Error('Signed out'); }
   if (!r.ok || j.status !== 'ok') throw new Error(j.message || 'Request failed');
   return j;
 }
-function toast(msg) { const t = $('#toast'); t.textContent = msg; t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => (t.style.display = 'none'), 3500); }
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => (t.style.display = 'none'), 4000); }
 
-// ---------- time formatting (Sydney) ----------
-const fmt = new Intl.DateTimeFormat('en-AU', { timeZone: 'Australia/Sydney', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
-const fd = (iso) => (iso ? fmt.format(new Date(iso)).replace(',', '') : '');
-function left(iso) {
-  if (!iso) return '';
-  let ms = new Date(iso) - Date.now();
-  const late = ms < 0; ms = Math.abs(ms);
-  const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000), d = Math.floor(h / 24);
-  const s = d >= 2 ? d + 'd' : h >= 1 ? h + 'h ' + m + 'm' : m + 'm';
-  return late ? s + ' late' : s + ' left';
-}
-const STATE = { met: 'Met', missed: 'Missed', overdue: 'Overdue', due_soon: 'Due soon', on_track: 'On track', no_kpi: 'No KPI', not_recorded: 'Not assigned' };
-function chip(leg, label) {
-  const extra = (leg.state === 'overdue' || leg.state === 'due_soon' || leg.state === 'on_track') && leg.dueAt ? ' · ' + left(leg.dueAt) : '';
-  const title = leg.dueAt ? 'Due ' + fd(leg.dueAt) + (leg.doneAt ? ' · done ' + fd(leg.doneAt) : '') : '';
-  return `<span class="chip ${leg.state}" title="${esc(title)}">${label} ${STATE[leg.state] || leg.state}${extra}</span>`;
+// ---------- formatting ----------
+const fmtDT = new Intl.DateTimeFormat('en-AU', { timeZone: 'Australia/Sydney', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
+const fmtD = new Intl.DateTimeFormat('en-AU', { timeZone: 'Australia/Sydney', day: '2-digit', month: 'short' });
+const fd = (iso) => (iso ? fmtDT.format(new Date(iso)).replace(',', '') : '');
+const fday = (iso) => (iso ? fmtD.format(new Date(iso)) : '');
+function span(ms) { ms = Math.abs(ms); const m = Math.round(ms / 60000), h = Math.floor(m / 60), d = Math.floor(h / 24); return d >= 2 ? `${d}d` : h >= 1 ? `${h}h ${m % 60}m` : `${m}m`; }
+function left(iso) { if (!iso) return ''; const ms = new Date(iso) - Date.now(); return ms < 0 ? span(ms) + ' late' : span(ms) + ' left'; }
+const PORTAL_NAMES = { uos: 'UOS Archibus', unsw: 'UNSW Archibus', mywork_ausgrid: 'Downer Mywork (Ausgrid/Asahi)', mywork_defence: 'Downer Mywork (Defence)', mywork_stockland: 'Downer Mywork (Stockland)', bsafe: 'BGIS BSAFE', knightfrank: 'Knight Frank FRC', shp: 'Stanton Hillier Parker MyBuildings' };
+const portalName = (k) => PORTAL_NAMES[k] || k || '';
+const STATE = { met: 'met', missed: 'missed', overdue: 'overdue', due_soon: 'due soon', on_track: 'on track', no_kpi: 'no KPI', not_recorded: 'not assigned' };
+function kpi(leg, label) {
+  const timing = ['overdue', 'due_soon', 'on_track'].includes(leg.state) && leg.dueAt ? ' · ' + left(leg.dueAt) : '';
+  const title = leg.dueAt ? `Due ${fd(leg.dueAt)}${leg.doneAt ? ' · done ' + fd(leg.doneAt) : ''}` : 'No KPI window set for this priority';
+  return `<span class="kpi ${leg.state}" title="${esc(title)}"><i></i><b>${label}</b> ${STATE[leg.state] || leg.state}${timing}</span>`;
 }
 const aroLink = (j) => j.webappId ? `https://office.aroflo.com/ims/Site/Service/workrequest/index.cfm?viewexist=1&wrCoded=${j.webappId}` : null;
-function jnCell(j) {
+function jobCells(j) {
   const u = aroLink(j);
-  return `<td class="jn" data-l="Job">${u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(j.jobNo)}</a>` : esc(j.jobNo)}<div class="sub">${esc(j.ref || '')}</div></td>`;
-}
-function jobCell(j) {
   const tags = [];
-  if (j.callout) tags.push(`<span class="chip callout" title="${esc(j.calloutReason || '')} — set by ${esc(j.calloutBy || '')}">Callout</span>`);
-  if (j.priority && !j.ruleConfirmed) tags.push('<span class="chip unconf" title="KPI window not confirmed against the contract">KPI unconfirmed</span>');
-  return `<td data-l="Job details"><div>${esc(j.name)}</div><div class="sub">${esc(j.client)}${j.priority ? ' · ' + esc(j.priority) : ' · <b>No priority</b>'} ${tags.join(' ')}</div></td>`;
+  if (j.callout) tags.push(`<span class="tag callout" title="${esc(j.calloutReason || '')} — set by ${esc(j.calloutBy || '')}">Callout</span>`);
+  if (j.priority && !j.ruleConfirmed) tags.push('<span class="tag unconf" title="KPI window not yet confirmed against the contract">KPI unconfirmed</span>');
+  return `<td class="jn" data-l="Job">${u ? `<a href="${esc(u)}" target="_blank" rel="noopener" title="Open in AroFlo">${esc(j.jobNo)}</a>` : esc(j.jobNo)}<div class="sub">${esc(j.ref || '—')}</div></td>
+    <td data-l="Details"><div>${esc(j.name)}</div><div class="sub">${esc(j.client)} · ${j.priority ? esc(j.priority) : '<b>no priority</b>'}${tags.length ? ' ' + tags.join(' ') : ''}</div></td>`;
 }
+const calloutBtn = (j) => j.callout
+  ? (data.user.isAdmin || j.calloutBy === data.user.name ? `<button class="small quiet" data-uncallout="${esc(j.jobNo)}" title="Remove the callout backdate">Undo callout</button>` : '')
+  : `<button class="small quiet" data-callout="${esc(j.jobNo)}" title="Attended before the job was received? Backdate the KPI clock">Callout…</button>`;
+
+// ---------- data views ----------
 const isOpen = (j) => !j.completedAt;
 const isRisk = (j) => isOpen(j) && ['overdue', 'due_soon'].some((s) => j.respond.state === s || j.complete.state === s);
-
-// ---------- views ----------
-function visibleJobs() {
-  const q = filters.q.trim().toLowerCase();
-  return data.jobs.filter((j) => (!filters.client || j.client === filters.client) &&
-    (!q || [j.jobNo, j.ref, j.name, j.client, j.assignee, j.firstAssignedTo].join(' ').toLowerCase().includes(q)));
-}
-function queuedJobNos() { return new Set(data.queue.filter((x) => x.status === 'queued' || x.status === 'in_progress').map((x) => x.job_no)); }
-
-function counts() {
-  const qd = queuedJobNos();
-  const jobs = visibleJobs();
-  return {
-    action: jobs.filter(isRisk).length + jobs.filter((j) => j.portal && j.completedAt && !j.portalClosed && !qd.has(j.jobNo)).length,
-    risk: jobs.filter(isRisk).length,
-    ready: jobs.filter((j) => j.portal && j.completedAt && !j.portalClosed && !qd.has(j.jobNo)).length,
-    gaps: jobs.filter(gap).length,
-    queue: data.queue.filter((x) => x.status === 'queued' || x.status === 'in_progress' || x.status === 'needs_adrian').length
-  };
-}
+const isOverdue = (j) => isOpen(j) && (j.respond.state === 'overdue' || j.complete.state === 'overdue');
 function gap(j) {
   if (isOpen(j) && !j.priorityId) return 'No priority set in AroFlo';
   if (isOpen(j) && !j.hasRule) return 'No KPI window for this priority';
   if (j.completedAt && j.respond.state === 'not_recorded') return 'Completed with no technician assigned';
   return '';
 }
-
-function renderTiles() {
-  const since = Date.now() - 30 * 86400000;
-  const byClient = new Map();
-  for (const j of data.jobs) {
-    if (!j.portal) continue;
-    const k = j.portalLabel;
-    if (!byClient.has(k)) byClient.set(k, { open: 0, risk: 0, ready: 0, met: 0, scored: 0 });
-    const t = byClient.get(k);
-    if (isOpen(j)) t.open++;
-    if (isRisk(j)) t.risk++;
-    if (j.completedAt && !j.portalClosed) t.ready++;
-    if (j.completedAt && new Date(j.completedAt) >= since) {
-      for (const leg of [j.respond, j.complete]) {
-        if (leg.state === 'met' || leg.state === 'missed') { t.scored++; if (leg.state === 'met') t.met++; }
-      }
-    }
-  }
-  $('#tiles').innerHTML = [...byClient.entries()].sort().map(([k, t]) => `
-    <div class="tile"><h3>${esc(k)}</h3>
-      <div class="row"><span>Open jobs</span><b>${t.open}</b></div>
-      <div class="row"><span>KPI at risk</span><b class="${t.risk ? 'r' : ''}">${t.risk}</b></div>
-      <div class="row"><span>Awaiting portal close-off</span><b class="${t.ready ? 'r' : ''}">${t.ready}</b></div>
-      <div class="row"><span>KPIs met, last 30 days</span><b>${t.scored ? Math.round((100 * t.met) / t.scored) + '%' : '–'}</b></div>
-    </div>`).join('');
+function soonest(j) { const t = [j.respond, j.complete].filter((l) => !l.doneAt && l.dueAt).map((l) => new Date(l.dueAt).getTime()); return t.length ? Math.min(...t) : Infinity; }
+function matches(j) {
+  if (filters.client && j.client !== filters.client) return false;
+  const q = filters.q.trim().toLowerCase();
+  return !q || [j.jobNo, j.ref, j.name, j.client, j.assignee, j.firstAssignedTo, j.portalLabel].join(' ').toLowerCase().includes(q);
 }
+const queuedSet = () => new Set(data.queue.filter((x) => x.status === 'queued' || x.status === 'in_progress').map((x) => x.job_no));
+const isReady = (j, qd) => j.portal && j.completedAt && !j.portalClosed && !qd.has(j.jobNo);
+const sameDay = (iso) => iso && fday(iso) === fday(new Date().toISOString());
 
-function renderTabs() {
-  const c = counts();
-  const tabs = [['action', 'Needs action', c.action, true], ['open', 'All open'], ['closed', 'Recently closed'], ['queue', 'Close-off queue', c.queue], ['gaps', 'Data gaps', c.gaps, true], ['rules', 'KPI rules']];
-  if (data.user.isAdmin) tabs.push(['exports', 'Portal exports'], ['users', 'Users']);
-  $('#tabs').innerHTML = tabs.map(([k, l, n, r]) => `<button data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}${n !== undefined ? `<span class="n ${r && n ? 'r' : ''}">${n}</span>` : ''}</button>`).join('');
-}
-
-function filterBar(extra = '') {
-  const clients = [...new Set(data.jobs.map((j) => j.client).filter(Boolean))].sort();
-  return `<div class="bar">
-    <select id="fClient"><option value="">All clients</option>${clients.map((c) => `<option ${c === filters.client ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
-    <input id="fQ" type="text" placeholder="Search job, WR, site, tech" value="${esc(filters.q)}" style="min-width:200px">
-    ${extra}</div>`;
-}
-
-function riskTable(rows) {
-  if (!rows.length) return '<div class="empty">Nothing at risk right now.</div>';
-  rows.sort((a, b) => soonest(a) - soonest(b));
-  return `<table><thead><tr><th>Job</th><th>Details</th><th>Received</th><th>Assigned</th><th>KPI</th><th></th></tr></thead><tbody>${rows.map((j) => `<tr>
-    ${jnCell(j)}${jobCell(j)}
-    <td data-l="Received">${fd(j.clockStart)}${j.callout ? '<div class="sub">callout</div>' : ''}</td>
-    <td data-l="Assigned">${esc(j.assignee || j.firstAssignedTo || '—')}</td>
-    <td data-l="KPI">${chip(j.respond, 'Respond')} ${chip(j.complete, 'Complete')}</td>
-    <td>${calloutBtn(j)}</td></tr>`).join('')}</tbody></table>`;
-}
-function soonest(j) {
-  const t = [j.respond, j.complete].filter((l) => !l.doneAt && l.dueAt).map((l) => new Date(l.dueAt).getTime());
-  return t.length ? Math.min(...t) : Infinity;
-}
-function calloutBtn(j) { return j.callout ? (data.user.isAdmin || j.calloutBy === data.user.name ? `<button data-uncallout="${esc(j.jobNo)}" title="Remove callout backdate">Undo callout</button>` : '') : `<button data-callout="${esc(j.jobNo)}">Callout…</button>`; }
-
-function readyTable(rows) {
-  if (!rows.length) return '<div class="empty">Every completed job is closed off in its portal.</div>';
-  rows.sort((a, b) => (a.portalLabel || '').localeCompare(b.portalLabel || '') || new Date(a.completedAt) - new Date(b.completedAt));
-  return `<div class="bar"><button class="primary" id="queueSel" ${sel.size ? '' : 'disabled'}>Close off selected in portal (${sel.size})</button>
-    <button id="selAll">Select all shown</button><span class="sub">Queued jobs are closed by the close-off runner on Adrian's computer using the real AroFlo times.</span></div>
-    <table><thead><tr><th></th><th>Job</th><th>Details</th><th>Portal</th><th>Completed (first)</th><th>KPI</th></tr></thead><tbody>${rows.map((j) => `<tr>
-    <td><input type="checkbox" data-sel="${esc(j.jobNo)}" ${sel.has(j.jobNo) ? 'checked' : ''} aria-label="Select ${esc(j.jobNo)}"></td>
-    ${jnCell(j)}${jobCell(j)}
-    <td data-l="Portal">${esc(j.portalLabel)}</td>
-    <td data-l="Completed">${fd(j.completedAt)}${j.lastCompletedAt && j.lastCompletedAt !== j.completedAt ? `<div class="sub">re-closed ${fd(j.lastCompletedAt)}</div>` : ''}</td>
-    <td data-l="KPI">${chip(j.respond, 'Respond')} ${chip(j.complete, 'Complete')}</td></tr>`).join('')}</tbody></table>`;
-}
-
+// ---------- render ----------
 function render() {
   if (!data) return;
-  renderTiles(); renderTabs();
-  const jobs = visibleJobs();
-  const qd = queuedJobNos();
-  const p = $('#panel');
-  try { localStorage.setItem('afp-jobs-tab', tab); } catch (e) {}
-  if (tab === 'action') {
-    p.innerHTML = (notice ? `<div style="background:var(--greenbg);color:var(--green);border-radius:8px;padding:10px 12px;margin-bottom:10px;font-weight:600">${esc(notice)} <button data-dismiss style="margin-left:8px">OK</button></div>` : '') + filterBar() +
-      '<h2>KPI at risk</h2><p class="hint">Open jobs that are overdue or close to their respond / complete KPI. Respond is met when a technician is first assigned.</p>' +
-      riskTable(jobs.filter(isRisk)) +
-      '<h2>Ready to close off in the client portal</h2><p class="hint">Completed in AroFlo, not yet closed in the portal.</p>' +
-      readyTable(jobs.filter((j) => j.portal && j.completedAt && !j.portalClosed && !qd.has(j.jobNo)));
-  } else if (tab === 'open') {
-    const rows = jobs.filter(isOpen).sort((a, b) => soonest(a) - soonest(b));
-    p.innerHTML = filterBar() + `<table><thead><tr><th>Job</th><th>Details</th><th>Received</th><th>Assigned</th><th>Status</th><th>KPI</th><th></th></tr></thead><tbody>${rows.map((j) => `<tr>
-      ${jnCell(j)}${jobCell(j)}<td data-l="Received">${fd(j.clockStart)}</td><td data-l="Assigned">${esc(j.assignee || j.firstAssignedTo || '—')}</td>
-      <td data-l="Status">${esc(j.status)}<div class="sub">${esc(j.substatus || '')}</div></td>
-      <td data-l="KPI">${chip(j.respond, 'Respond')} ${chip(j.complete, 'Complete')}</td><td>${calloutBtn(j)}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">No open jobs.</td></tr>'}</tbody></table>`;
-  } else if (tab === 'closed') {
-    const since = Date.now() - Number(filters.closedDays) * 86400000;
-    const rows = jobs.filter((j) => j.completedAt && new Date(j.completedAt) >= since).sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
-    p.innerHTML = filterBar(`<select id="fDays">${['1', '7', '14', '30'].map((d) => `<option value="${d}" ${d === filters.closedDays ? 'selected' : ''}>Last ${d} day${d === '1' ? '' : 's'}</option>`).join('')}</select>`) +
-      `<table><thead><tr><th>Job</th><th>Details</th><th>Received</th><th>First assigned</th><th>Completed (first)</th><th>KPI</th><th>Portal</th><th></th></tr></thead><tbody>${rows.map((j) => `<tr>
-      ${jnCell(j)}${jobCell(j)}<td data-l="Received">${fd(j.clockStart)}</td>
-      <td data-l="First assigned">${fd(j.respond.doneAt)}<div class="sub">${esc(j.firstAssignedTo || '')}</div></td>
-      <td data-l="Completed">${fd(j.completedAt)}</td>
-      <td data-l="KPI">${chip(j.respond, 'Respond')} ${chip(j.complete, 'Complete')}</td>
-      <td data-l="Portal">${j.portal ? (j.portalClosed ? `<span class="chip met">${esc(j.portalCloseValue)}</span>` : qd.has(j.jobNo) ? '<span class="chip q-queued">Queued</span>' : '<span class="chip overdue">Not closed</span>') : '<span class="sub">n/a</span>'}</td>
-      <td>${calloutBtn(j)}</td></tr>`).join('') || '<tr><td colspan="8" class="empty">No jobs closed in this period.</td></tr>'}</tbody></table>`;
-  } else if (tab === 'queue') {
-    const rows = data.queue;
-    p.innerHTML = '<p class="hint">Close-offs run on Adrian\'s computer each working hour while it is on. Items marked "Needs Adrian" are waiting on a portal login or a decision.</p>' +
-      `<table><thead><tr><th>Job</th><th>Portal</th><th>Status</th><th>Requested</th><th>Result</th><th></th></tr></thead><tbody>${rows.map((x) => `<tr>
-      <td data-l="Job" class="jn">${esc(x.job_no)}<div class="sub">${esc(x.custon || '')}</div></td>
-      <td data-l="Portal">${esc(portalName(x.portal))}</td>
-      <td data-l="Status"><span class="chip q-${esc(x.status)}">${esc(x.status.replace('_', ' '))}</span></td>
-      <td data-l="Requested">${fd(x.requested_at)}<div class="sub">${esc(x.requested_by)}</div></td>
-      <td data-l="Result">${esc(x.result || '')}${x.finished_at ? `<div class="sub">${fd(x.finished_at)}</div>` : ''}</td>
-      <td>${x.status === 'queued' ? `<button data-cancel="${esc(x.id)}">Cancel</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="empty">Queue is empty.</td></tr>'}</tbody></table>`;
-  } else if (tab === 'gaps') {
-    const rows = jobs.filter(gap);
-    p.innerHTML = filterBar() + '<p class="hint">These jobs can\'t be measured. Fix the priority in AroFlo (it flows through on the next refresh) or add the KPI window under KPI rules.</p>' +
-      `<table><thead><tr><th>Job</th><th>Details</th><th>Problem</th><th>Received</th></tr></thead><tbody>${rows.map((j) => `<tr>
-      ${jnCell(j)}${jobCell(j)}<td data-l="Problem">${esc(gap(j))}</td><td data-l="Received">${fd(j.receivedAt)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">No data gaps.</td></tr>'}</tbody></table>`;
-  } else if (tab === 'rules') {
-    renderRules(p);
-  } else if (tab === 'users') {
-    renderUsers(p);
-  } else if (tab === 'exports') {
-    renderExports(p);
+  const jobs = data.jobs.filter(matches);
+  const qd = queuedSet();
+  const v = {
+    risk: jobs.filter(isRisk).sort((a, b) => soonest(a) - soonest(b)),
+    ready: jobs.filter((j) => isReady(j, qd)).sort((a, b) => (a.portalLabel || '').localeCompare(b.portalLabel || '') || new Date(a.completedAt) - new Date(b.completedAt)),
+    open: jobs.filter(isOpen).sort((a, b) => soonest(a) - soonest(b)),
+    gaps: jobs.filter(gap),
+    closed: jobs.filter((j) => j.completedAt && new Date(j.completedAt) >= Date.now() - Number(closedDays) * 86400000).sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt))
+  };
+  const q = { needs: data.queue.filter((x) => x.status === 'needs_adrian'), queued: data.queue.filter((x) => x.status === 'queued'), prog: data.queue.filter((x) => x.status === 'in_progress'),
+    today: data.queue.filter((x) => x.status === 'done' && sameDay(x.finished_at)), finished: data.queue.filter((x) => !['queued', 'in_progress', 'needs_adrian'].includes(x.status)) };
+
+  renderNotice();
+  renderStats(v, q);
+  renderFilters();
+  renderPortals(qd);
+  renderSections(v, q, qd);
+  renderSelbar();
+}
+
+function renderNotice() {
+  const box = $('#noticeBox');
+  const s = data.sync;
+  const parts = [];
+  if (notice) parts.push(`<div class="notice ${notice.kind || ''}"><span>${esc(notice.text)}</span><span class="sp"></span><button class="small" data-dismiss>OK</button></div>`);
+  if (s && s.last_error) parts.push(`<div class="notice warn"><span>The last AroFlo refresh failed (${esc(s.last_error)}). Showing data as at ${fd(s.last_ok_at)}.</span></div>`);
+  box.innerHTML = parts.join('');
+}
+
+function renderStats(v, q) {
+  const tiles = [
+    { k: 'risk', n: v.risk.length, l: 'KPIs at risk', d: `${v.risk.filter(isOverdue).length} overdue`, cls: v.risk.length ? 'bad' : 'ok' },
+    { k: 'ready', n: v.ready.length, l: 'Ready to close off', d: 'completed in AroFlo, open in portal', cls: v.ready.length ? 'warn' : 'ok' },
+    { k: 'queue', n: q.queued.length + q.prog.length, l: 'In the close-off queue', d: q.needs.length ? `${q.needs.length} need Adrian` : `${q.today.length} closed today`, cls: q.needs.length ? 'bad' : 'acc' },
+    { k: 'open', n: v.open.length, l: 'Open jobs', d: `${v.gaps.length} with data gaps`, cls: '' }
+  ];
+  $('#stats').innerHTML = tiles.map((t) => `<button class="stat ${t.cls}" data-jump="${t.k}"><div class="l">${t.l}</div><div class="n">${t.n}</div><div class="d">${esc(t.d)}</div></button>`).join('');
+}
+
+function renderFilters() {
+  const clients = [...new Set(data.jobs.map((j) => j.client).filter(Boolean))].sort();
+  const sel0 = $('#fClient');
+  sel0.innerHTML = `<option value="">All clients</option>${clients.map((c) => `<option ${c === filters.client ? 'selected' : ''}>${esc(c)}</option>`).join('')}`;
+}
+
+function renderPortals(qd) {
+  const since = Date.now() - 30 * 86400000;
+  const by = new Map();
+  for (const j of data.jobs) {
+    if (!j.portal || !matches(j)) continue;
+    if (!by.has(j.portal)) by.set(j.portal, { open: 0, risk: 0, ready: 0, queued: 0, met: 0, scored: 0 });
+    const t = by.get(j.portal);
+    if (isOpen(j)) t.open++;
+    if (isRisk(j)) t.risk++;
+    if (isReady(j, qd)) t.ready++;
+    if (j.completedAt && qd.has(j.jobNo)) t.queued++;
+    if (j.completedAt && new Date(j.completedAt) >= since) for (const leg of [j.respond, j.complete]) if (leg.state === 'met' || leg.state === 'missed') { t.scored++; if (leg.state === 'met') t.met++; }
   }
+  const rows = [...by.entries()].sort((a, b) => portalName(a[0]).localeCompare(portalName(b[0])));
+  $('#portals').innerHTML = rows.length ? `<table><thead><tr><th>Portal</th><th>Open</th><th>At risk</th><th>To close off</th><th>Queued</th><th>KPIs met, 30 days</th></tr></thead><tbody>${rows.map(([k, t]) => {
+    const pct = t.scored ? Math.round((100 * t.met) / t.scored) : null;
+    const lvl = pct === null ? '' : pct >= 90 ? '' : pct >= 75 ? 'mid' : 'low';
+    return `<tr class="${t.open + t.ready + t.queued ? '' : 'dim'}"><td>${esc(portalName(k))}</td><td>${t.open}</td><td class="${t.risk ? 'r' : ''}">${t.risk}</td><td class="${t.ready ? 'w' : ''}">${t.ready}</td><td>${t.queued}</td>
+      <td>${pct === null ? '<span class="mut">–</span>' : `${pct}% <span class="bar"><i class="${lvl}" style="width:${pct}%"></i></span>`}</td></tr>`; }).join('')}</tbody></table>` : '';
 }
-const PORTAL_NAMES = { uos: 'UOS Archibus', unsw: 'UNSW Archibus', mywork_ausgrid: 'Downer Mywork (Ausgrid/Asahi)', mywork_defence: 'Downer Mywork (Defence)', mywork_stockland: 'Downer Mywork (Stockland)', bsafe: 'BGIS BSAFE', knightfrank: 'Knight Frank FRC', shp: 'Stanton Hillier Parker MyBuildings' };
-const portalName = (k) => PORTAL_NAMES[k] || k;
 
-const UNITS = [['', '—'], ['minutes', 'minutes'], ['hours', 'hours'], ['calendar_days', 'calendar days'], ['business_days', 'working days'], ['next_working_day', 'next working day'], ['due_date', 'task due date']];
-function unitSel(v, dis) { return `<select ${dis}>${UNITS.map(([k, l]) => `<option value="${k}" ${k === (v || '') ? 'selected' : ''}>${l}</option>`).join('')}</select>`; }
-function renderRules(p) {
+// ----- sections -----
+function section(id, title, count, badgeCls, summary, body, attn) {
+  const isOn = open.has(id);
+  const n = show[id] || PAGE;
+  return `<section class="sec ${attn || ''}" id="sec-${id}">
+    <div class="sec-h" data-toggle="${id}" role="button" aria-expanded="${isOn}">
+      <h2>${title}${count !== null && count !== undefined ? ` <span class="badge ${badgeCls || ''}">${count}</span>` : ''}</h2>
+      <div class="sum">${summary}</div>
+      <button class="small tog" data-toggle="${id}">${isOn ? 'Close' : 'Open'}</button>
+    </div>
+    ${isOn ? `<div class="sec-b">${body(n)}</div>` : ''}
+  </section>`;
+}
+function paged(id, rows, renderRow, cols, emptyText) {
+  const n = show[id] || PAGE;
+  if (!rows.length) return `<div class="empty">${emptyText}</div>`;
+  const slice = rows.slice(0, n);
+  return `<table class="t"><thead><tr>${cols.map((c) => `<th>${c}</th>`).join('')}</tr></thead><tbody>${slice.map(renderRow).join('')}</tbody></table>
+    ${rows.length > n ? `<div class="more"><button data-more="${id}">Show ${Math.min(PAGE, rows.length - n)} more of ${rows.length - n} remaining</button></div>` : ''}`;
+}
+const top3 = (rows, f) => rows.slice(0, 3).map(f).join(', ');
+const shortClient = (c) => (c || '').replace(/\s*\(.*?\)/g, '').split(' - ')[0].split(/\s+/).slice(0, 2).join(' ');
+
+function renderSections(v, q, qd) {
   const admin = data.user.isAdmin;
-  const dis = admin ? '' : 'disabled';
-  p.innerHTML = `<p class="hint">Respond = first assignment to a technician (or callout attendance). Complete = first completion in AroFlo. ${admin ? 'Edit a row and press Save. Tick Confirmed once checked against the contract.' : 'Only admins can edit.'}</p>
-    <table class="rules"><thead><tr><th>Priority</th><th>Client</th><th>Respond</th><th>Complete</th><th>Confirmed</th><th>Notes</th><th></th></tr></thead><tbody>${data.rules.map((r) => `<tr data-rule="${r.id}">
-    <td data-l="Priority"><input type="text" value="${esc(r.label)}" data-f="label" ${dis}></td>
-    <td data-l="Client">${esc(r.client || 'Any')}</td>
-    <td data-l="Respond"><input type="number" min="0" step="any" value="${r.respond.value ?? ''}" data-f="respondValue" ${dis}> <span data-f="respondUnit">${unitSel(r.respond.unit, dis)}</span></td>
-    <td data-l="Complete"><input type="number" min="0" step="any" value="${r.complete.value ?? ''}" data-f="completeValue" ${dis}> <span data-f="completeUnit">${unitSel(r.complete.unit, dis)}</span></td>
-    <td data-l="Confirmed"><input type="checkbox" data-f="confirmed" ${r.confirmed ? 'checked' : ''} ${dis}></td>
-    <td data-l="Notes"><input type="text" value="${esc(r.notes)}" data-f="notes" ${dis}><div class="sub">${esc(r.updatedBy || '')} ${fd(r.updatedAt)}</div></td>
-    <td>${admin ? '<button data-saverule>Save</button>' : ''}</td></tr>`).join('')}</tbody></table>`;
+  const risk = v.risk, ready = v.ready;
+  const byPortal = (rows) => { const m = new Map(); for (const j of rows) m.set(j.portalLabel, (m.get(j.portalLabel) || 0) + 1); return [...m.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k.replace('Downer Mywork ', 'Mywork ')} ${n}`).join(' · '); };
+  const html = [];
+
+  // 1. KPIs at risk
+  html.push(section('risk', 'KPIs at risk', risk.length, risk.length ? 'bad' : 'ok',
+    risk.length ? `${risk.filter(isOverdue).length} overdue, ${risk.length - risk.filter(isOverdue).length} due soon · ${top3(risk, (j) => `${j.jobNo} ${shortClient(j.client)}`)}` : 'Nothing overdue or due soon.',
+    () => `<p class="hint">Open jobs that are overdue or close to their respond / complete window. Respond counts when a technician is first assigned; complete when the job is first completed in AroFlo. If we attended before the job arrived, use Callout to backdate the clock.</p>` +
+      paged('risk', risk, (j) => `<tr>${jobCells(j)}<td class="num" data-l="Received">${fd(j.clockStart)}${j.callout ? '<div class="sub">callout</div>' : ''}</td><td data-l="Technician">${esc(j.assignee || j.firstAssignedTo || '—')}</td><td data-l="KPI">${kpi(j.respond, 'Respond')}${kpi(j.complete, 'Complete')}</td><td>${calloutBtn(j)}</td></tr>`,
+        ['Job', 'Details', 'Received', 'Technician', 'KPI', ''], 'Nothing at risk right now.'),
+    risk.length ? 'attn' : ''));
+
+  // 2. Ready to close off
+  const shownReady = ready.slice(0, show.ready || PAGE);
+  html.push(section('ready', 'Ready to close off in the client portal', ready.length, ready.length ? 'warn' : 'ok',
+    ready.length ? byPortal(ready) : 'Every completed job is closed off in its portal.',
+    () => `<p class="hint">Completed in AroFlo but still open in the client's portal. Tick the jobs and press <b>Close off in portal</b>; the close-off runner on Adrian's computer works through the queue each hour on weekdays, using the real AroFlo times.</p>
+      <div class="row"><button class="small" data-selall>Select all ${ready.length} shown</button>${sel.size ? `<button class="small" id="selNone">Clear selection</button>` : ''}<span class="sp"></span>${lastExportsLine()}</div>` +
+      paged('ready', ready, (j) => `<tr><td class="ck"><input type="checkbox" data-sel="${esc(j.jobNo)}" ${sel.has(j.jobNo) ? 'checked' : ''} aria-label="Select ${esc(j.jobNo)}"></td>${jobCells(j)}<td data-l="Portal">${esc(j.portalLabel)}</td><td class="num" data-l="Completed">${fd(j.completedAt)}${j.lastCompletedAt && j.lastCompletedAt !== j.completedAt ? `<div class="sub">re-closed ${fd(j.lastCompletedAt)}</div>` : ''}</td><td data-l="KPI">${kpi(j.respond, 'Respond')}${kpi(j.complete, 'Complete')}</td></tr>`,
+        ['', 'Job', 'Details', 'Portal', 'Completed', 'KPI'], 'Every completed job is closed off in its portal.'),
+    ''));
+
+  // 3. Queue
+  const qsum = [q.queued.length ? `${q.queued.length} queued` : '', q.prog.length ? `${q.prog.length} in progress` : '', q.needs.length ? `${q.needs.length} need Adrian` : '', q.today.length ? `${q.today.length} closed today` : ''].filter(Boolean).join(' · ') || 'Queue is empty.';
+  html.push(section('queue', 'Close-off queue', q.queued.length + q.prog.length + q.needs.length, q.needs.length ? 'bad' : q.queued.length + q.prog.length ? 'acc' : '', qsum,
+    () => {
+      const active = [...q.prog, ...q.queued];
+      const qrow = (x) => `<tr><td class="jn" data-l="Job">${esc(x.job_no)}<div class="sub">${esc(x.custon || '')}</div></td><td data-l="Portal">${esc(portalName(x.portal))}</td><td data-l="Status"><span class="tag q-${esc(x.status)}">${esc(x.status.replace('_', ' ').replace('needs adrian', 'needs Adrian'))}</span></td><td class="num" data-l="Requested">${fd(x.requested_at)}<div class="sub">${esc(x.requested_by)}</div></td><td data-l="Result">${esc(x.result || '')}${x.finished_at ? `<div class="sub">${fd(x.finished_at)}</div>` : ''}</td><td>${x.status === 'queued' ? `<button class="small quiet" data-cancel="${esc(x.id)}">Cancel</button>` : ''}</td></tr>`;
+      return `<p class="hint">The runner claims up to 25 jobs each hour (6:47am–4:47pm, weekdays) while Adrian's computer is on. Anything it can't do on its own comes back as <b>needs Adrian</b>.</p>` +
+        (q.needs.length ? `<div class="needs"><h3>Needs Adrian (${q.needs.length})</h3><ul>${q.needs.map((x) => `<li><b>${esc(x.job_no)}</b> · ${esc(portalName(x.portal))} — ${esc(x.result || '')}</li>`).join('')}</ul></div>` : '') +
+        (active.length ? paged('queue', active, qrow, ['Job', 'Portal', 'Status', 'Requested', 'Result', ''], '') : '<div class="empty">Nothing queued.</div>') +
+        `<div class="row" style="margin-top:12px"><button class="small" data-qdone>${queueShowDone ? 'Hide' : 'Show'} finished (${q.finished.length}, last 14 days)</button></div>` +
+        (queueShowDone ? paged('queueDone', q.finished.sort((a, b) => new Date(b.finished_at || b.requested_at) - new Date(a.finished_at || a.requested_at)), qrow, ['Job', 'Portal', 'Status', 'Requested', 'Result', ''], 'Nothing finished yet.') : '');
+    }, q.needs.length ? 'attn' : ''));
+
+  // 4. Data gaps
+  html.push(section('gaps', 'Data gaps', v.gaps.length, v.gaps.length ? 'warn' : 'ok',
+    v.gaps.length ? `${v.gaps.filter((j) => gap(j).startsWith('No priority')).length} with no priority · ${v.gaps.filter((j) => gap(j).startsWith('No KPI')).length} with no KPI window · ${v.gaps.filter((j) => gap(j).startsWith('Completed')).length} completed unassigned` : 'Every job can be measured.',
+    () => `<p class="hint">These jobs can't be measured. Set the priority in AroFlo (it flows through on the next refresh), or add the window under KPI rules.</p>` +
+      paged('gaps', v.gaps, (j) => `<tr>${jobCells(j)}<td data-l="Problem">${esc(gap(j))}</td><td class="num" data-l="Received">${fd(j.receivedAt)}</td></tr>`, ['Job', 'Details', 'Problem', 'Received'], 'No data gaps.'),
+    v.gaps.length ? 'attn-warn' : ''));
+
+  // 5. All open
+  html.push(section('open', 'All open jobs', v.open.length, '', `${v.open.length} open · ${v.open.filter((j) => !j.assignee).length} not yet assigned`,
+    () => paged('open', v.open, (j) => `<tr>${jobCells(j)}<td class="num" data-l="Received">${fd(j.clockStart)}</td><td data-l="Technician">${esc(j.assignee || j.firstAssignedTo || '—')}</td><td data-l="Status">${esc(j.status)}<div class="sub">${esc(j.substatus || '')}</div></td><td data-l="KPI">${kpi(j.respond, 'Respond')}${kpi(j.complete, 'Complete')}</td><td>${calloutBtn(j)}</td></tr>`,
+      ['Job', 'Details', 'Received', 'Technician', 'Status', 'KPI', ''], 'No open jobs.')));
+
+  // 6. Recently closed
+  const scored = v.closed.flatMap((j) => [j.respond, j.complete]).filter((l) => l.state === 'met' || l.state === 'missed');
+  const metPct = scored.length ? Math.round((100 * scored.filter((l) => l.state === 'met').length) / scored.length) : null;
+  html.push(section('closed', 'Recently closed', v.closed.length, '', `${v.closed.length} completed in the last ${closedDays} day${closedDays === '1' ? '' : 's'}${metPct !== null ? ` · KPIs met ${metPct}%` : ''}`,
+    () => `<div class="row"><label class="small mut">Show last <select id="fDays">${['1', '7', '14', '30'].map((d) => `<option value="${d}" ${d === closedDays ? 'selected' : ''}>${d} day${d === '1' ? '' : 's'}</option>`).join('')}</select></label></div>` +
+      paged('closed', v.closed, (j) => `<tr>${jobCells(j)}<td class="num" data-l="Received">${fd(j.clockStart)}</td><td class="num" data-l="First assigned">${fd(j.respond.doneAt)}<div class="sub">${esc(j.firstAssignedTo || '')}</div></td><td class="num" data-l="Completed">${fd(j.completedAt)}</td><td data-l="KPI">${kpi(j.respond, 'Respond')}${kpi(j.complete, 'Complete')}</td>
+        <td data-l="Portal">${j.portal ? (j.portalClosed ? `<span class="tag ok" title="${esc(j.portalCloseDate || '')}">${esc(j.portalCloseValue)}</span>` : qd.has(j.jobNo) ? '<span class="tag q-queued">queued</span>' : '<span class="tag bad">not closed</span>') : '<span class="mut small">no portal</span>'}</td><td>${calloutBtn(j)}</td></tr>`,
+        ['Job', 'Details', 'Received', 'First assigned', 'Completed', 'KPI', 'Portal', ''], 'No jobs closed in this period.')));
+
+  // 7. KPI rules
+  const unconf = data.rules.filter((r) => !r.confirmed).length;
+  html.push(section('rules', 'KPI rules', data.rules.length, unconf ? 'warn' : 'ok', `${data.rules.length} priorities · ${unconf} not yet confirmed against the contract`, () => rulesBody(admin)));
+
+  // 8/9. Admin
+  if (admin) {
+    html.push(section('exports', 'Portal exports', null, '', lastExportsLine(true), () => exportsBody()));
+    html.push(section('users', 'Users', users ? users.length : null, '', users ? `${users.length} people · ${users.filter((u) => u.is_admin).length} admins` : 'Who can sign in', () => usersBody()));
+  }
+  $('#sections').innerHTML = html.join('');
+  if (admin && open.has('users') && !users) loadUsers();
 }
 
-// ---------- portal exports (admin) ----------
-// Each portal export lists every order still OPEN in that portal. Loading it marks completed
-// jobs that are not in the list as already closed in the portal, so the "ready to close off"
-// list only shows real work.
-const exp = { refs: [], files: [], portals: new Set(), result: null, busy: false };
+function lastExportsLine(long) {
+  const b = data.baselines || [];
+  if (!b.length) return long ? 'No portal exports loaded yet.' : '<span class="small mut">No portal exports loaded yet</span>';
+  const parts = b.map((x) => `${portalName(x.portal).replace('Downer Mywork ', 'Mywork ')} ${x.export_date || fday(x.at)}`);
+  return long ? `Last loaded: ${parts.join(' · ')}` : `<span class="small mut" title="${esc(parts.join(', '))}">Exports loaded for ${b.length} of ${Object.keys(PORTAL_NAMES).length} portals</span>`;
+}
+
+// ----- rules -----
+const UNITS = [['', '—'], ['minutes', 'minutes'], ['hours', 'hours'], ['calendar_days', 'calendar days'], ['business_days', 'working days'], ['next_working_day', 'next working day'], ['due_date', 'task due date']];
+const unitSel = (v, dis) => `<select ${dis}>${UNITS.map(([k, l]) => `<option value="${k}" ${k === (v || '') ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+function rulesBody(admin) {
+  const dis = admin ? '' : 'disabled';
+  const groups = new Map();
+  for (const r of data.rules) { const g = r.label.split(' - ')[0].trim(); if (!groups.has(g)) groups.set(g, []); groups.get(g).push(r); }
+  return `<p class="hint">Respond = time to first assignment (or callout attendance). Complete = time to first completion in AroFlo. ${admin ? 'Edit a row and press Save. Tick Confirmed once the window has been checked against the contract.' : 'Only admins can edit these.'}</p>
+    <table class="t edit"><thead><tr><th>Priority</th><th>Respond within</th><th>Complete within</th><th>Confirmed</th><th>Notes</th><th></th></tr></thead><tbody>${[...groups.entries()].sort().map(([g, rs]) => `<tr class="group"><td colspan="6">${esc(g)}</td></tr>` + rs.map((r) => `<tr data-rule="${r.id}">
+      <td data-l="Priority" class="w100"><input type="text" value="${esc(r.label)}" data-f="label" ${dis}>${r.client ? `<div class="sub">${esc(r.client)} only</div>` : ''}</td>
+      <td data-l="Respond"><input type="number" min="0" step="any" value="${r.respond.value ?? ''}" data-f="respondValue" ${dis}> <span data-f="respondUnit">${unitSel(r.respond.unit, dis)}</span></td>
+      <td data-l="Complete"><input type="number" min="0" step="any" value="${r.complete.value ?? ''}" data-f="completeValue" ${dis}> <span data-f="completeUnit">${unitSel(r.complete.unit, dis)}</span></td>
+      <td data-l="Confirmed"><input type="checkbox" data-f="confirmed" ${r.confirmed ? 'checked' : ''} ${dis}></td>
+      <td data-l="Notes" class="w100"><input type="text" value="${esc(r.notes)}" data-f="notes" ${dis}><div class="sub">${r.updatedBy ? esc(r.updatedBy) + ' · ' + fd(r.updatedAt) : ''}</div></td>
+      <td>${admin ? '<button class="small" data-saverule>Save</button>' : ''}</td></tr>`).join('')).join('')}</tbody></table>`;
+}
+
+// ----- exports -----
+const exp = { refs: [], files: [], portals: new Set(), result: null, busy: false, date: '' };
 function loadSheetJs() {
   if (window.XLSX) return Promise.resolve();
   return new Promise((ok, bad) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; s.onload = ok; s.onerror = () => bad(new Error('Could not load the spreadsheet reader')); document.head.appendChild(s); });
@@ -359,148 +546,156 @@ async function readExports(files) {
       for (const row of rows) for (const cell of row) {
         const v = String(cell).toUpperCase();
         for (const m of v.matchAll(/\b(W\d{6,10}|\d{6,12})\b/g)) refs.add(m[1]);
-        if (/^PDEF$/.test(v)) hint.add('mywork_defence'); if (/^STK$/.test(v)) hint.add('mywork_stockland');
-        if (/^(AUSGD|ASAHI)$/.test(v)) hint.add('mywork_ausgrid'); if (/^FRC REF/.test(v)) hint.add('knightfrank');
+        if (v === 'PDEF') hint.add('mywork_defence'); if (v === 'STK') hint.add('mywork_stockland');
+        if (v === 'AUSGD' || v === 'ASAHI') hint.add('mywork_ausgrid'); if (/^FRC REF/.test(v)) hint.add('knightfrank');
+        if (v === 'VENDOR BRANCH') hint.add('bsafe');
       }
     }
   }
   return { refs: [...refs], hint };
 }
-function renderExports(p) {
+function exportsBody() {
   const today = new Intl.DateTimeFormat('en-AU', { timeZone: 'Australia/Sydney', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date());
   const r = exp.result;
-  p.innerHTML = `<p class="hint">Export the list of <b>open / issued</b> orders from a client portal and load it here. Completed AroFlo jobs that are not in the export are recorded as already closed in that portal. Only tick portals whose <b>full</b> open list is in the file.</p>
-    <div class="bar"><input type="file" id="expFiles" multiple accept=".xlsx,.xls,.csv"><span class="sub">${exp.files.length ? esc(exp.files.join(', ')) + ' · ' + exp.refs.length + ' order numbers found' : ''}</span></div>
-    <div class="bar">${Object.entries(PORTAL_NAMES).map(([k, l]) => `<label style="display:inline-flex;gap:5px;align-items:center;margin:0 10px 0 0;color:var(--ink);font-size:13px"><input type="checkbox" data-expportal="${k}" ${exp.portals.has(k) ? 'checked' : ''}> ${esc(l)}</label>`).join('')}</div>
-    <div class="bar"><label style="margin:0;color:var(--ink)">Export date <input type="text" id="expDate" value="${esc(exp.date || today)}" style="width:110px"></label>
-      <button id="expPreview" ${exp.refs.length && exp.portals.size && !exp.busy ? '' : 'disabled'}>Preview</button>
-      <button class="primary" id="expApply" ${r && r.dryRun && !exp.busy ? '' : 'disabled'}>Apply</button></div>
-    ${r ? `<h2>${r.dryRun ? 'Preview - nothing changed yet' : 'Applied'}</h2><table><thead><tr><th>Portal</th><th>${r.dryRun ? 'Will be marked closed' : 'Marked closed'}</th><th>Still to close off</th><th>No client ref (left alone)</th></tr></thead><tbody>${r.results.map((x) => `<tr>
+  return `<p class="hint">Each client portal can export its list of <b>open / issued</b> orders. Load it here and any completed AroFlo job that isn't in the list is recorded as already closed in that portal, so "Ready to close off" only shows real work. Do this weekly, or whenever the list looks wrong.</p>
+    <div class="steps">
+      <div class="step"><h3><span>1</span>Choose the export files</h3>
+        <label class="drop" id="drop"><input type="file" id="expFiles" multiple accept=".xlsx,.xls,.csv">${exp.files.length ? `<b>${esc(exp.files.join(', '))}</b><br>${exp.refs.length} order numbers found` : 'Click to choose, or drop .xlsx / .xls / .csv files here'}</label></div>
+      <div class="step"><h3><span>2</span>Which portals are fully covered?</h3>
+        <div class="chk">${Object.entries(PORTAL_NAMES).map(([k, l]) => `<label><input type="checkbox" data-expportal="${k}" ${exp.portals.has(k) ? 'checked' : ''}>${esc(l)}</label>`).join('')}</div>
+        <div class="lastload">Only tick a portal if the file holds its <b>complete</b> open list.</div></div>
+      <div class="step"><h3><span>3</span>Preview, then apply</h3>
+        <div class="row"><label class="small mut">Export date <input type="text" id="expDate" value="${esc(exp.date || today)}" style="width:110px"></label></div>
+        <div class="row"><button id="expPreview" ${exp.refs.length && exp.portals.size && !exp.busy ? '' : 'disabled'}>Preview</button><button class="primary" id="expApply" ${r && r.dryRun && !exp.busy ? '' : 'disabled'}>Apply</button>${exp.busy ? '<span class="mut small">Working…</span>' : ''}</div>
+        <div class="lastload">${esc(lastExportsLine(true))}</div></div>
+    </div>
+    ${r ? `<h3 style="margin:16px 0 8px">${r.dryRun ? 'Preview — nothing changed yet' : 'Applied'}</h3><table class="t"><thead><tr><th>Portal</th><th>${r.dryRun ? 'Will be recorded as closed' : 'Recorded as closed'}</th><th>Still to close off</th><th>No client ref (left alone)</th></tr></thead><tbody>${r.results.map((x) => `<tr>
       <td data-l="Portal">${esc(portalName(x.portal))}</td>
-      <td data-l="Closed">${x.markedClosed}${x.markedClosedJobs.length ? `<div class="sub">${esc(x.markedClosedJobs.slice(0, 40).join(', '))}${x.markedClosedJobs.length > 40 ? ' …' : ''}</div>` : ''}</td>
-      <td data-l="To close">${x.awaitingCloseOff.length}<div class="sub">${esc(x.awaitingCloseOff.join(', '))}</div></td>
-      <td data-l="No ref">${x.completedWithNoClientRef.length}<div class="sub">${esc(x.completedWithNoClientRef.join(', '))}</div></td></tr>`).join('')}</tbody></table>` : ''}`;
+      <td data-l="Closed"><b>${x.markedClosed}</b>${x.markedClosedJobs.length ? `<div class="sub">${esc(x.markedClosedJobs.slice(0, 30).join(', '))}${x.markedClosedJobs.length > 30 ? ' …' : ''}</div>` : ''}</td>
+      <td data-l="To close"><b>${x.awaitingCloseOff.length}</b><div class="sub">${esc(x.awaitingCloseOff.slice(0, 30).join(', '))}${x.awaitingCloseOff.length > 30 ? ' …' : ''}</div></td>
+      <td data-l="No ref"><b>${x.completedWithNoClientRef.length}</b><div class="sub">${esc(x.completedWithNoClientRef.join(', '))}</div></td></tr>`).join('')}</tbody></table>` : ''}`;
 }
 async function runBaseline(dryRun) {
-  exp.busy = true; exp.date = $('#expDate').value.trim(); render();
+  exp.busy = true; exp.date = ($('#expDate') || {}).value?.trim() || exp.date; render();
   try {
     const r = await api('kpi/baseline', { method: 'POST', body: JSON.stringify({ portals: [...exp.portals], openRefs: exp.refs, exportDate: exp.date, dryRun }) });
     exp.result = { dryRun, results: r.results };
-    if (!dryRun) { toast('Portal export applied'); exp.busy = false; await load(); tab = 'exports'; }
+    if (!dryRun) { exp.busy = false; notice = { text: `Portal export applied: ${r.results.reduce((a, x) => a + x.markedClosed, 0)} jobs recorded as already closed in their portal.` }; await load(); return; }
   } catch (err) { toast(err.message); }
   exp.busy = false; render();
 }
-document.addEventListener('change', async (e) => {
-  if (e.target.id === 'expFiles') {
-    const files = [...e.target.files]; if (!files.length) return;
-    try { const r = await readExports(files); exp.refs = r.refs; exp.files = files.map((f) => f.name); exp.portals = new Set(r.hint); exp.result = null; render(); }
-    catch (err) { toast(err.message); }
-  }
-  if (e.target.dataset && e.target.dataset.expportal) { e.target.checked ? exp.portals.add(e.target.dataset.expportal) : exp.portals.delete(e.target.dataset.expportal); exp.result = null; render(); }
-});
-document.addEventListener('click', (e) => {
-  if (e.target.id === 'expPreview') runBaseline(true);
-  if (e.target.id === 'expApply') { if (confirm('Record the completed jobs listed as already closed in these portals?')) runBaseline(false); }
-});
 
-// ---------- users (admin) ----------
+// ----- users -----
 let users = null;
-async function renderUsers(p) {
-  if (!users) { p.innerHTML = '<div class="empty">Loading…</div>'; try { users = (await api('users')).users; } catch (err) { p.innerHTML = `<div class="empty">${esc(err.message)}</div>`; return; } }
-  p.innerHTML = `<p class="hint">Everyone signs in with their name (or email) and PIN. Admins can refresh from AroFlo, edit KPI rules and manage users.</p>
-    <table><thead><tr><th>Name</th><th>Email</th><th>Admin</th><th>Active</th><th>New PIN</th><th></th></tr></thead><tbody>${users.map((u) => `<tr data-user="${esc(u.id)}">
-    <td data-l="Name"><input type="text" data-u="name" value="${esc(u.name)}"></td>
-    <td data-l="Email"><input type="text" data-u="email" value="${esc(u.email || '')}"></td>
+async function loadUsers() { try { users = (await api('users')).users; render(); } catch (err) { toast(err.message); } }
+function usersBody() {
+  if (!users) return '<div class="empty">Loading…</div>';
+  return `<p class="hint">Everyone signs in with their name (or email) and PIN. Admins can also refresh from AroFlo, edit KPI rules, load portal exports and manage users.</p>
+    <table class="t edit"><thead><tr><th>Name</th><th>Email</th><th>Admin</th><th>Active</th><th>New PIN</th><th></th></tr></thead><tbody>${users.map((u) => `<tr data-user="${esc(u.id)}">
+    <td data-l="Name" class="w100"><input type="text" data-u="name" value="${esc(u.name)}"></td>
+    <td data-l="Email" class="w100"><input type="text" data-u="email" value="${esc(u.email || '')}"></td>
     <td data-l="Admin"><input type="checkbox" data-u="isAdmin" ${u.is_admin ? 'checked' : ''}></td>
     <td data-l="Active"><input type="checkbox" data-u="active" ${u.active ? 'checked' : ''}></td>
-    <td data-l="New PIN"><input type="password" data-u="pin" inputmode="numeric" placeholder="unchanged" autocomplete="new-password"></td>
-    <td><button data-saveuser>Save</button></td></tr>`).join('')}
-    <tr data-user="new"><td data-l="Name"><input type="text" data-u="name" placeholder="New person"></td>
-    <td data-l="Email"><input type="text" data-u="email"></td>
-    <td data-l="Admin"><input type="checkbox" data-u="isAdmin"></td><td></td>
-    <td data-l="PIN"><input type="password" data-u="pin" inputmode="numeric" placeholder="4+ digits" autocomplete="new-password"></td>
-    <td><button class="primary" data-saveuser>Add</button></td></tr></tbody></table>`;
+    <td data-l="New PIN"><input type="password" data-u="pin" inputmode="numeric" placeholder="unchanged" autocomplete="new-password" style="width:110px"></td>
+    <td><button class="small" data-saveuser>Save</button></td></tr>`).join('')}
+    <tr data-user="new" class="group"><td data-l="Name" class="w100"><input type="text" data-u="name" placeholder="New person"></td><td data-l="Email" class="w100"><input type="text" data-u="email" placeholder="email (optional)"></td>
+    <td data-l="Admin"><input type="checkbox" data-u="isAdmin"></td><td></td><td data-l="PIN"><input type="password" data-u="pin" inputmode="numeric" placeholder="4+ digits" autocomplete="new-password" style="width:110px"></td>
+    <td><button class="small primary" data-saveuser>Add</button></td></tr></tbody></table>`;
 }
 
-// ---------- events ----------
+// ----- selection bar -----
+function renderSelbar() {
+  const b = $('#selbar'); b.classList.toggle('on', sel.size > 0);
+  $('#selCount').textContent = `${sel.size} selected`;
+}
+
+// ---------- actions ----------
+function setOpen(id, on) { on ? open.add(id) : open.delete(id); ls.set('afp-open', [...open]); }
+function jumpTo(id) { setOpen(id, true); render(); const el = $('#sec-' + id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+
 document.addEventListener('click', async (e) => {
-  const t = e.target.closest('button,input[type=checkbox]');
+  const t = e.target.closest('button,input[type=checkbox],.sec-h,.stat');
   if (!t) return;
-  if (t.dataset.tab) { tab = t.dataset.tab; render(); return; }
-  if (t.dataset.sel !== undefined) { t.checked ? sel.add(t.dataset.sel) : sel.delete(t.dataset.sel); const b = $('#queueSel'); if (b) { b.disabled = !sel.size; b.textContent = `Close off selected in portal (${sel.size})`; } return; }
-  if (t.hasAttribute && t.hasAttribute('data-dismiss')) { notice = ''; render(); return; }
-  if (t.id === 'selAll') { document.querySelectorAll('[data-sel]').forEach((c) => { c.checked = true; sel.add(c.dataset.sel); }); render(); return; }
-  if (t.id === 'queueSel') {
-    const all = [...sel];
-    const noExport = [...new Set(data.jobs.filter((j) => sel.has(j.jobNo) && ['uos', 'unsw', 'bsafe', 'shp'].includes(j.portal)).map((j) => j.portalLabel))];
-    const warn = noExport.length ? `\n\nNo portal export has been loaded yet for: ${noExport.join(', ')}. Some of these may already be closed in the portal - the runner will check and skip those.` : '';
-    if (!confirm(`Queue ${all.length} job${all.length === 1 ? '' : 's'} for portal close-off?${warn}`)) return;
-    t.disabled = true;
-    let ok = 0; const bad = [];
-    try {
-      for (let i = 0; i < all.length; i += 100) {
-        t.textContent = `Queuing ${Math.min(i + 100, all.length)} of ${all.length}…`;
-        const r = await api('kpi/closeoff', { method: 'POST', body: JSON.stringify({ jobNos: all.slice(i, i + 100) }) });
-        ok += r.results.filter((x) => x.queued).length;
-        bad.push(...r.results.filter((x) => !x.queued).map((x) => `${x.jobNo} (${x.reason})`));
-      }
-      sel.clear();
-      notice = `${ok} job${ok === 1 ? '' : 's'} queued for portal close-off. The runner works through them each hour on weekdays (6:47am–4:47pm) - progress is in the Close-off queue tab.${bad.length ? ' Not queued: ' + bad.join(', ') : ''}`;
-      await load();
-    } catch (err) { toast(err.message); t.disabled = false; t.textContent = `Close off selected in portal (${sel.size})`; }
-    return;
-  }
+  if (t.classList.contains('stat')) { jumpTo(t.dataset.jump); return; }
+  if (t.dataset.toggle) { setOpen(t.dataset.toggle, !open.has(t.dataset.toggle)); render(); return; }
+  if (t.id === 'expandAll') { ['risk', 'ready', 'queue', 'gaps', 'open', 'closed', 'rules', 'exports', 'users'].forEach((k) => open.add(k)); ls.set('afp-open', [...open]); render(); return; }
+  if (t.id === 'collapseAll') { open.clear(); ls.set('afp-open', []); render(); return; }
+  if (t.dataset.more) { show[t.dataset.more] = (show[t.dataset.more] || PAGE) + PAGE; render(); return; }
+  if (t.hasAttribute('data-dismiss')) { notice = null; render(); return; }
+  if (t.dataset.sel !== undefined) { t.checked ? sel.add(t.dataset.sel) : sel.delete(t.dataset.sel); renderSelbar(); return; }
+  if (t.hasAttribute('data-selall')) { const qd = queuedSet(); data.jobs.filter(matches).filter((j) => isReady(j, qd)).forEach((j) => sel.add(j.jobNo)); render(); return; }
+  if (t.id === 'selNone' || t.id === 'selClear') { sel.clear(); render(); return; }
+  if (t.hasAttribute('data-qdone')) { queueShowDone = !queueShowDone; render(); return; }
+  if (t.id === 'queueSel') { await queueSelected(t); return; }
   if (t.dataset.cancel) { try { await api('kpi/closeoff/' + t.dataset.cancel, { method: 'DELETE' }); toast('Cancelled'); await load(); } catch (err) { toast(err.message); } return; }
   if (t.dataset.callout) { openCallout(t.dataset.callout); return; }
-  if (t.dataset.uncallout) {
-    if (!confirm(`Remove the callout backdate on job ${t.dataset.uncallout}?`)) return;
-    try { await api('kpi/callout/' + t.dataset.uncallout, { method: 'DELETE' }); toast('Callout removed'); await load(); } catch (err) { toast(err.message); }
-    return;
-  }
-  if (t.hasAttribute('data-saveuser')) {
-    const tr = t.closest('tr'); const g = (f) => tr.querySelector(`[data-u="${f}"]`);
-    const id = tr.dataset.user;
-    const body = { name: g('name').value.trim(), email: g('email').value.trim(), isAdmin: g('isAdmin').checked };
-    if (g('pin').value.trim()) body.pin = g('pin').value.trim();
-    if (id !== 'new') body.active = g('active').checked;
-    if (body.pin && body.pin.length < 4) { toast('PIN must be at least 4 digits'); return; }
-    if (id === 'new' && (!body.name || !body.pin)) { toast('Enter a name and PIN'); return; }
-    try {
-      await api(id === 'new' ? 'users' : 'users/' + id, { method: id === 'new' ? 'POST' : 'PATCH', body: JSON.stringify(body) });
-      users = null; toast(id === 'new' ? 'User added' : 'Saved'); render();
-    } catch (err) { toast(err.message); }
-    return;
-  }
-  if (t.hasAttribute('data-saverule')) {
-    const tr = t.closest('tr');
-    const g = (f) => tr.querySelector(`[data-f="${f}"]`);
-    const body = { label: g('label').value, respondValue: g('respondValue').value, respondUnit: g('respondUnit').querySelector('select').value,
-      completeValue: g('completeValue').value, completeUnit: g('completeUnit').querySelector('select').value, confirmed: g('confirmed').checked, notes: g('notes').value };
-    try { await api('kpi/rules/' + tr.dataset.rule, { method: 'PUT', body: JSON.stringify(body) }); toast('Saved'); await load(); } catch (err) { toast(err.message); }
-    return;
-  }
-  if (t.id === 'refresh') {
-    t.disabled = true; t.textContent = 'Refreshing…';
-    try { const r = await api('kpi/sync', { method: 'POST' }); toast(`Refreshed: ${r.open} open, ${r.completed} recently completed`); await load(); }
-    catch (err) { toast(err.message); }
-    t.disabled = false; t.textContent = 'Refresh from AroFlo';
-    return;
-  }
+  if (t.dataset.uncallout) { if (!confirm(`Remove the callout backdate on job ${t.dataset.uncallout}?`)) return; try { await api('kpi/callout/' + t.dataset.uncallout, { method: 'DELETE' }); toast('Callout removed'); await load(); } catch (err) { toast(err.message); } return; }
+  if (t.hasAttribute('data-saveuser')) { await saveUser(t.closest('tr')); return; }
+  if (t.hasAttribute('data-saverule')) { await saveRule(t.closest('tr')); return; }
+  if (t.id === 'expPreview') { runBaseline(true); return; }
+  if (t.id === 'expApply') { if (confirm('Record the completed jobs in the preview as already closed in these portals?')) runBaseline(false); return; }
+  if (t.id === 'refresh') { t.disabled = true; t.textContent = 'Refreshing…'; try { const r = await api('kpi/sync', { method: 'POST' }); toast(`Refreshed from AroFlo: ${r.open} open, ${r.completed} recently completed`); await load(); } catch (err) { toast(err.message); } t.disabled = false; t.textContent = 'Refresh from AroFlo'; return; }
   if (t.id === 'logout') { try { await api('logout', { method: 'POST' }); } catch (err) {} try { localStorage.removeItem('afp-token'); } catch (e2) {} token = null; showLogin(); }
 });
+
+async function queueSelected(btn) {
+  const all = [...sel];
+  if (!all.length) return;
+  const noExport = [...new Set(data.jobs.filter((j) => sel.has(j.jobNo) && !(data.baselines || []).some((b) => b.portal === j.portal)).map((j) => j.portalLabel))];
+  const warn = noExport.length ? `\n\nNo portal export has been loaded for: ${noExport.join(', ')}. Some of these may already be closed in the portal; the runner checks and skips those.` : '';
+  if (!confirm(`Queue ${all.length} job${all.length === 1 ? '' : 's'} for portal close-off?${warn}`)) return;
+  btn.disabled = true; let ok = 0; const bad = [];
+  try {
+    for (let i = 0; i < all.length; i += 100) {
+      btn.textContent = `Queuing ${Math.min(i + 100, all.length)} of ${all.length}…`;
+      const r = await api('kpi/closeoff', { method: 'POST', body: JSON.stringify({ jobNos: all.slice(i, i + 100) }) });
+      ok += r.results.filter((x) => x.queued).length;
+      bad.push(...r.results.filter((x) => !x.queued).map((x) => `${x.jobNo} (${x.reason})`));
+    }
+    sel.clear();
+    notice = { text: `${ok} job${ok === 1 ? '' : 's'} queued for portal close-off. The runner works through them each hour on weekdays; progress is under Close-off queue.${bad.length ? ' Not queued: ' + bad.join(', ') : ''}` };
+    setOpen('queue', true);
+    await load();
+  } catch (err) { toast(err.message); }
+  btn.disabled = false; btn.textContent = 'Close off in portal';
+}
+async function saveUser(tr) {
+  const g = (f) => tr.querySelector(`[data-u="${f}"]`); const id = tr.dataset.user;
+  const body = { name: g('name').value.trim(), email: g('email').value.trim(), isAdmin: g('isAdmin').checked };
+  if (g('pin').value.trim()) body.pin = g('pin').value.trim();
+  if (id !== 'new') body.active = g('active').checked;
+  if (body.pin && body.pin.length < 4) return toast('PIN must be at least 4 digits');
+  if (id === 'new' && (!body.name || !body.pin)) return toast('Enter a name and a PIN');
+  try { await api(id === 'new' ? 'users' : 'users/' + id, { method: id === 'new' ? 'POST' : 'PATCH', body: JSON.stringify(body) }); toast(id === 'new' ? 'User added' : 'Saved'); users = null; await loadUsers(); } catch (err) { toast(err.message); }
+}
+async function saveRule(tr) {
+  const g = (f) => tr.querySelector(`[data-f="${f}"]`);
+  const body = { label: g('label').value, respondValue: g('respondValue').value, respondUnit: g('respondUnit').querySelector('select').value, completeValue: g('completeValue').value, completeUnit: g('completeUnit').querySelector('select').value, confirmed: g('confirmed').checked, notes: g('notes').value };
+  try { await api('kpi/rules/' + tr.dataset.rule, { method: 'PUT', body: JSON.stringify(body) }); toast('Rule saved'); await load(); } catch (err) { toast(err.message); }
+}
+
+let qTimer = null;
 document.addEventListener('input', (e) => {
-  if (e.target.id === 'fQ') { filters.q = e.target.value; const pos = e.target.selectionStart; render(); const el = $('#fQ'); if (el) { el.focus(); el.setSelectionRange(pos, pos); } }
+  if (e.target.id === 'fQ') { filters.q = e.target.value; clearTimeout(qTimer); qTimer = setTimeout(() => { const pos = e.target.selectionStart; render(); const el = $('#fQ'); if (el) { el.value = filters.q; el.focus(); el.setSelectionRange(pos, pos); } }, 150); }
 });
-document.addEventListener('change', (e) => {
-  if (e.target.id === 'fClient') { filters.client = e.target.value; render(); }
-  if (e.target.id === 'fDays') { filters.closedDays = e.target.value; render(); }
+document.addEventListener('change', async (e) => {
+  if (e.target.id === 'fClient') { filters.client = e.target.value; ls.set('afp-f-client', filters.client); render(); }
+  if (e.target.id === 'fDays') { closedDays = e.target.value; ls.set('afp-closed-days', closedDays); render(); }
+  if (e.target.id === 'expFiles') { const files = [...e.target.files]; if (!files.length) return; await takeFiles(files); }
+  if (e.target.dataset && e.target.dataset.expportal) { e.target.checked ? exp.portals.add(e.target.dataset.expportal) : exp.portals.delete(e.target.dataset.expportal); exp.result = null; render(); }
 });
+async function takeFiles(files) {
+  try { const r = await readExports(files); exp.refs = r.refs; exp.files = files.map((f) => f.name); exp.portals = new Set(r.hint); exp.result = null; render(); }
+  catch (err) { toast(err.message); }
+}
+document.addEventListener('dragover', (e) => { const d = e.target.closest('#drop'); if (d) { e.preventDefault(); d.classList.add('over'); } });
+document.addEventListener('dragleave', (e) => { const d = e.target.closest('#drop'); if (d) d.classList.remove('over'); });
+document.addEventListener('drop', (e) => { const d = e.target.closest('#drop'); if (d) { e.preventDefault(); d.classList.remove('over'); takeFiles([...e.dataTransfer.files]); } });
 
 // ---------- callout dialog ----------
 let coJob = null;
 function openCallout(jobNo) {
-  const j = data.jobs.find((x) => x.jobNo === jobNo);
-  coJob = jobNo;
+  const j = data.jobs.find((x) => x.jobNo === jobNo); coJob = jobNo;
   $('#coJob').textContent = `Job ${jobNo} · ${j ? j.name : ''} · received ${j ? fd(j.receivedAt) : ''}`;
   $('#coAt').value = ''; $('#coWhy').value = ''; $('#coErr').textContent = '';
   $('#dlgCallout').showModal();
@@ -509,26 +704,23 @@ $('#coSave').addEventListener('click', async (e) => {
   e.preventDefault();
   const at = $('#coAt').value, why = $('#coWhy').value.trim();
   if (!at || why.length < 5) { $('#coErr').textContent = 'Enter the attendance time and a reason.'; return; }
-  try {
-    await api('kpi/callout', { method: 'POST', body: JSON.stringify({ jobNo: coJob, attendedAt: at, reason: why }) });
-    $('#dlgCallout').close(); toast('Callout saved'); await load();
-  } catch (err) { $('#coErr').textContent = err.message; }
+  try { await api('kpi/callout', { method: 'POST', body: JSON.stringify({ jobNo: coJob, attendedAt: at, reason: why }) }); $('#dlgCallout').close(); toast('Callout saved'); await load(); }
+  catch (err) { $('#coErr').textContent = err.message; }
 });
 
 // ---------- login / load ----------
 function showLogin() { $('#app').hidden = true; $('#login').hidden = false; }
-$('#lbtn').addEventListener('click', async () => {
-  $('#lerr').textContent = '';
+$('#loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault(); $('#lerr').textContent = ''; $('#lbtn').disabled = true;
   try {
     const r = await fetch('/portal/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: $('#lname').value, pin: $('#lpin').value }) });
     const j = await r.json();
     if (!r.ok || j.status !== 'ok') throw new Error(j.message || 'Sign in failed');
-    token = j.token; try { localStorage.setItem('afp-token', token); } catch (e) {}
+    token = j.token; ls.set('afp-token', token);
     await load();
   } catch (err) { $('#lerr').textContent = err.message; }
+  $('#lbtn').disabled = false;
 });
-$('#lpin').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#lbtn').click(); });
-
 async function load() {
   if (!token) return showLogin();
   data = await api('kpi/summary');
@@ -536,11 +728,14 @@ async function load() {
   $('#who').textContent = data.user.name;
   $('#refresh').hidden = !data.user.isAdmin;
   const s = data.sync;
-  $('#sync').textContent = s && s.last_ok_at ? 'AroFlo data as at ' + fd(s.last_ok_at) + (s.last_error ? ' · last refresh failed' : '') : 'Waiting for first AroFlo refresh';
+  const age = s && s.last_ok_at ? (Date.now() - new Date(s.last_ok_at)) / 3600000 : null;
+  $('#sync').innerHTML = s && s.last_ok_at
+    ? `<span class="dot ${s.last_error ? 'bad' : age > 2 ? 'stale' : ''}"></span>AroFlo data as at ${fd(s.last_ok_at)}`
+    : '<span class="dot stale"></span>Waiting for the first AroFlo refresh';
   render();
 }
 load().catch(() => {});
-setInterval(() => { if (token && !document.hidden && !document.querySelector('dialog[open]')) load().catch(() => {}); }, 5 * 60000);
+setInterval(() => { if (token && !document.hidden && !$('dialog[open]') && !sel.size) load().catch(() => {}); }, 5 * 60000);
 })();
 </script>
 </body>

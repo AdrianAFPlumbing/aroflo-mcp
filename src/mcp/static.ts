@@ -12,6 +12,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const JOBS_PATH = join(__dirname, '..', '..', 'public', 'jobs.html');
 
 const PAGE_PATHS = new Set(['/', '/index.html', '/jobs', '/jobs/', '/kpi', '/portal-app']);
+const LOGO_PATH = join(__dirname, '..', '..', 'public', 'logo.png');
+let cachedLogo: Buffer | null = null;
 
 let cached: string | null = null;
 
@@ -32,6 +34,16 @@ export async function handleStatic(
   res: ServerResponse,
   pathname: string
 ): Promise<boolean> {
+  if (pathname === '/logo.png') {
+    try {
+      cachedLogo = cachedLogo ?? (await readFile(LOGO_PATH));
+      res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' });
+      res.end(cachedLogo);
+    } catch {
+      res.writeHead(404); res.end();
+    }
+    return true;
+  }
   if (!PAGE_PATHS.has(pathname)) return false;
   const html = await loadJobs();
   res.writeHead(html ? 200 : 404, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
