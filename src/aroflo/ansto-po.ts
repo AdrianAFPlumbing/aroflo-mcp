@@ -17,6 +17,11 @@
  *     PO import as a duplicate), or
  *   - converts the PO import into the primary job (name, Cust ON = WO number,
  *     description from the PO, custom field, NEW TASK substatus).
+ *
+ * Tasks created before the "ANSTO Order No" custom field was added to the task
+ * type do not carry the field and AroFlo rejects any write to it (error 701
+ * "Field Not Found in Database"). For those the Order No is kept in Cust ON
+ * as "<WO>/<Order No>" instead, which the matching helpers already understand.
  */
 import { fetch } from 'undici';
 
@@ -247,6 +252,13 @@ export interface AnstoTaskLite {
   status: string;
   createdutc: string;
   orderNo: string;
+  /**
+   * False when the task has no "ANSTO Order No" custom field at all (tasks
+   * created before the field was added to the task type, or on another task
+   * type). Writing the field to such a task fails with AroFlo error 701
+   * "Field Not Found in Database", so the Order No goes into Cust ON instead.
+   */
+  hasOrderNoField: boolean;
   documents: { name: string; url: string }[];
 }
 
@@ -262,20 +274,21 @@ function collectDocs(node: unknown, out: { name: string; url: string }[]): void 
   for (const v of Object.values(node)) if (Array.isArray(v) || isRecord(v)) collectDocs(v, out);
 }
 
-function readOrderNoField(task: Record<string, unknown>): string {
+function readOrderNoField(task: Record<string, unknown>): { present: boolean; value: string } {
   const cfs = task['customfields'];
-  if (!Array.isArray(cfs)) return '';
+  if (!Array.isArray(cfs)) return { present: false, value: '' };
   for (const cf of cfs) {
     if (isRecord(cf) && str(cf['name']).trim() === ANSTO_DEFAULTS.orderNoFieldName) {
-      return str(cf['value']).trim();
+      return { present: true, value: str(cf['value']).trim() };
     }
   }
-  return '';
+  return { present: false, value: '' };
 }
 
 function toLite(task: Record<string, unknown>): AnstoTaskLite {
   const documents: { name: string; url: string }[] = [];
   collectDocs(task['documentsandphotos'], documents);
+  const orderNoField = readOrderNoField(task);
   return {
     taskid: str(task['taskid']),
     jobnumber: str(task['jobnumber']),
@@ -283,7 +296,8 @@ function toLite(task: Record<string, unknown>): AnstoTaskLite {
     custon: str(task['custon']).trim(),
     status: str(task['status']),
     createdutc: str(task['createdutc']),
-    orderNo: readOrderNoField(task),
+    orderNo: orderNoField.value,
+    hasOrderNoField: orderNoField.present,
     documents
   };
 }
@@ -334,12 +348,14 @@ export async function listRecentAnstoTasks(
 
 const PO_PDF_RE = /^4300\d{6}\.pdf$/i;
 const SEVEN_DIGIT_WO_RE = /^\d{7}$/;
+// Cust ON is the 7-digit WO, optionally followed by the Order No ("8202001/4300168301").
+const LEADING_WO_RE = /^\d{7}(?:[/,;\s]|$)/;
 
 /** True when the task looks like a raw / unmatched SAP PO import that still needs processing. */
 export function needsPoProcessing(task: AnstoTaskLite): boolean {
   const hasPoPdf = task.documents.some((d) => PO_PDF_RE.test(d.name));
   if (!hasPoPdf) return false;
-  if (SEVEN_DIGIT_WO_RE.test(task.custon)) return false; // already paired / primary
+  if (LEADING_WO_RE.test(task.custon)) return false; // already paired / primary
   // Raised under the PO number because the PO had no Work Order No - already a job.
   if (/^4300\d{6}$/.test(task.custon) && !task.taskname.startsWith('[')) return false;
   if (/^\[DUPLICATE OF JN/i.test(task.taskname)) return false;
@@ -396,6 +412,24 @@ function mergeOrderNos(existing: string, orderNo: string): string {
   parts.push(orderNo);
   return parts.join(', ');
 }
+
+/**
+ * Fallback for tasks without the "ANSTO Order No" custom field: keep the Order
+ * No in Cust ON alongside the Work Order No ("8202001/4300168301"), the form
+ * older ANSTO jobs already use and that findPrimaryForWo/ForPo both match on.
+ */
+export function custonWithOrderNo(custon: string, orderNo: string): string {
+  const parts = custon
+    .split(/[,/;\s]+/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.includes(orderNo)) return custon;
+  parts.push(orderNo);
+  return parts.join('/');
+}
+
+const noFieldNote = (jobnumber: string): string =>
+  `JN ${jobnumber} has no "${ANSTO_DEFAULTS.orderNoFieldName}" field (older task) - Order No kept in Cust ON instead`;
 
 async function postTask(client: AroFloClient, xml: string): Promise<Record<string, unknown>> {
   const response = await client.post('tasks', xml);
@@ -549,14 +583,30 @@ async function applyParsedPo(
         note: `Would pair with JN ${primary.jobnumber}`
       };
     }
-    const merged = mergeOrderNos(primary.orderNo, orderNo);
-    if (merged !== primary.orderNo) {
-      await postTask(
-        client,
-        `<tasks><task><taskid>${primary.taskid}</taskid><customfields><customfield><name>${
-          ANSTO_DEFAULTS.orderNoFieldName
-        }</name><value>${cdata(merged)}</value></customfield></customfields></task></tasks>`
-      );
+    let fieldNote: string | undefined;
+    if (primary.hasOrderNoField) {
+      const merged = mergeOrderNos(primary.orderNo, orderNo);
+      if (merged !== primary.orderNo) {
+        await postTask(
+          client,
+          `<tasks><task><taskid>${primary.taskid}</taskid><customfields><customfield><name>${
+            ANSTO_DEFAULTS.orderNoFieldName
+          }</name><value>${cdata(merged)}</value></customfield></customfields></task></tasks>`
+        );
+      }
+    } else {
+      // Older task without the custom field: AroFlo rejects the field write
+      // (701 Field Not Found), so record the Order No in Cust ON instead.
+      const custon = custonWithOrderNo(primary.custon, orderNo);
+      if (custon !== primary.custon) {
+        await postTask(
+          client,
+          `<tasks><task><taskid>${primary.taskid}</taskid><custon>${cdata(
+            custon
+          )}</custon></task></tasks>`
+        );
+      }
+      fieldNote = noFieldNote(primary.jobnumber);
     }
     if (importTask) {
       await postTask(
@@ -591,7 +641,7 @@ async function applyParsedPo(
       }
     }
     return {
-      note: pdfNote,
+      note: [fieldNote, pdfNote].filter(Boolean).join('; ') || undefined,
       outcome: 'paired-with-existing',
       jobnumber: importTask?.jobnumber,
       orderNo,
@@ -619,20 +669,26 @@ async function applyParsedPo(
     };
   }
 
-  const common =
+  const orderNoFieldXml = `<customfields><customfield><name>${
+    ANSTO_DEFAULTS.orderNoFieldName
+  }</name><value>${cdata(orderNo)}</value></customfield></customfields>`;
+
+  const commonFor = (custon: string, withField: boolean): string =>
     `<taskname>${cdata(taskName)}</taskname>` +
-    `<custon>${cdata(reference)}</custon>` +
+    `<custon>${cdata(custon)}</custon>` +
     `<description>${cdata(description)}</description>` +
     `<status>Not Started</status>` +
     `<substatus><substatusid>${ANSTO_DEFAULTS.newTaskSubstatusId}</substatusid></substatus>` +
-    `<customfields><customfield><name>${ANSTO_DEFAULTS.orderNoFieldName}</name><value>${cdata(
-      orderNo
-    )}</value></customfield></customfields>`;
+    (withField ? orderNoFieldXml : '');
 
   if (importTask) {
+    // An import task created before the custom field existed cannot take it
+    // (701 Field Not Found) - keep the Order No in Cust ON alongside the WO.
+    const withField = importTask.hasOrderNoField;
+    const custon = withField ? reference : custonWithOrderNo(reference, orderNo);
     await postTask(
       client,
-      `<tasks><task><taskid>${importTask.taskid}</taskid>${common}</task></tasks>`
+      `<tasks><task><taskid>${importTask.taskid}</taskid>${commonFor(custon, withField)}</task></tasks>`
     );
     logger.info(
       { orderNo, workOrderNo: po.workOrderNo, jobnumber: importTask.jobnumber },
@@ -643,9 +699,13 @@ async function applyParsedPo(
       jobnumber: importTask.jobnumber,
       orderNo,
       workOrderNo: po.workOrderNo,
-      taskName
+      taskName,
+      note: withField ? undefined : noFieldNote(importTask.jobnumber)
     };
   }
+
+  // A brand-new task on the ANSTO task type always carries the field.
+  const common = commonFor(reference, true);
 
   const due = await tomorrowDueDate();
   const pr = await postTask(
@@ -705,7 +765,11 @@ export async function sweepPoTasks(
     pageSize: 500,
     withDocuments: true
   });
-  const candidates = tasks.filter(needsPoProcessing);
+  // Archived imports were dealt with by hand - leave them alone in the sweep.
+  // (aroflo_ansto_process_po on an explicit jobnumber still processes them.)
+  const candidates = tasks.filter(
+    (t) => t.status.toLowerCase() !== 'archived' && needsPoProcessing(t)
+  );
   const results: PoResult[] = [];
   for (const task of candidates) {
     try {

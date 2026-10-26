@@ -70,6 +70,12 @@ the task and acts deterministically:
   `[DUPLICATE OF JN …]`.
 - No job yet → convert the PO import into the job (name, Cust ON = WO No, HTML
   description from the PO, custom field, NEW TASK substatus).
+- Task has no **ANSTO Order No** field (created before the field was added to
+  the task type - AroFlo answers error 701 "Field Not Found in Database") → the
+  Order No goes into Cust ON as `<WO No>/<Order No>` instead, and the result
+  carries a note saying so.
+- Archived imports are skipped by the sweep (they were dealt with by hand);
+  `aroflo_ansto_process_po` on an explicit job number still processes them.
 
 Tools: `aroflo_ansto_sweep_po_tasks` (run daily; `dryRun` previews),
 `aroflo_ansto_process_po` (one job number, or raw PO text), `aroflo_ansto_parse_po_text`.

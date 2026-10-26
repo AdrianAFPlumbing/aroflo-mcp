@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildDescriptionHtml,
   buildTaskName,
+  custonWithOrderNo,
   findPrimaryForPo,
   findPrimaryForWo,
   needsPoProcessing,
@@ -59,15 +60,27 @@ function lite(p: Partial<AnstoTaskLite>): AnstoTaskLite {
     status: p.status ?? 'Not Started',
     createdutc: '',
     orderNo: p.orderNo ?? '',
+    hasOrderNoField: p.hasOrderNoField ?? true,
     documents: p.documents ?? []
   };
 }
+
+describe('custonWithOrderNo', () => {
+  it('appends the Order No to the WO and never duplicates it', () => {
+    expect(custonWithOrderNo('8202001', '4300168301')).toBe('8202001/4300168301');
+    expect(custonWithOrderNo('8202001/4300168301', '4300168301')).toBe('8202001/4300168301');
+    expect(custonWithOrderNo('4300168301', '4300168301')).toBe('4300168301');
+    expect(custonWithOrderNo('', '4300168301')).toBe('4300168301');
+  });
+});
 
 describe('needsPoProcessing / findPrimaryForWo', () => {
   it('flags raw PO imports and skips paired ones', () => {
     const pdf = [{ name: '4300168300.pdf', url: 'https://x' }];
     expect(needsPoProcessing(lite({ documents: pdf }))).toBe(true);
     expect(needsPoProcessing(lite({ documents: pdf, custon: '8202932' }))).toBe(false);
+    // Older task converted without the custom field: Order No kept in Cust ON.
+    expect(needsPoProcessing(lite({ documents: pdf, custon: '8202932/4300168300' }))).toBe(false);
     expect(needsPoProcessing(lite({ documents: pdf, taskname: '[DUPLICATE OF JN 1] x' }))).toBe(
       false
     );
