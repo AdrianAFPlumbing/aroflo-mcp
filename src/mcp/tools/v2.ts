@@ -4,9 +4,13 @@ import { z } from 'zod';
 import type { AroFloClient } from '../../aroflo/client.js';
 import { convertLegacyIds, v2TaskIdForJobNumber } from '../../aroflo/v2-bridge.js';
 import {
+  addTaskLabour,
+  listTaskLabour,
   patchTask,
   resolvePriorityId,
   resolveSubstatusId,
+  resolveUserId,
+  resolveWorkTypeId,
   uploadTaskDocument
 } from '../../aroflo/v2-tasks.js';
 import type { AroFloV2Client, AroFloV2Response, V2QueryValue } from '../../aroflo/v2-client.js';
@@ -33,6 +37,9 @@ const fieldsSchema = z
   );
 const outputSchema = z.object({}).passthrough();
 const readOnly = { readOnlyHint: true, idempotentHint: true, openWorldHint: true };
+
+/** Australian Facilities Group root org — scope for user-name lookups. */
+const DEFAULT_ORG_ID = process.env['AROFLO_V2_ORG_ID'] ?? '72M800001CR';
 
 /** Either a v2 task id or a 6-digit job number. */
 const taskRefSchema = {
@@ -435,6 +442,122 @@ export function registerV2Tools(server: McpServer, v2: AroFloV2Client, legacy: A
         return errorToolResult(error, {
           mode: errMode(args.mode),
           debug: { api: 'v2', args: { ...args, description: undefined } }
+        });
+      }
+    }
+  );
+
+  server.registerTool(
+    'aroflo_v2_add_labour',
+    {
+      title: 'AroFlo v2: Add labour (timesheet) entry to task',
+      description:
+        'Add one labour/timesheet entry to a task via APIv2 (POST /v2/tasks/{taskId}/labours), by v2 id or job number. ' +
+        'One call = one block of time for one technician on one date. user is a v2 user id, "Given Family" name or email; workType is a v2 id or the exact work-type name (e.g. "Ausgrid", "Defence Downer", "UNSW", "Generic"). ' +
+        'Times are 24-hour HH:MM on the same day; hours is computed from them when omitted. ' +
+        'Refuses (without writing) if that user already has labour on the task for that date, unless allowDuplicate is true — list the existing entries first with aroflo_v2_get path "tasks/{id}/labours".',
+      inputSchema: {
+        ...taskRefSchema,
+        user: z
+          .string()
+          .min(1)
+          .describe('v2 user id, "Given Family" name, or email of the technician'),
+        workType: z.string().min(1).describe('Work type v2 id or exact name'),
+        date: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .describe('Work date, YYYY-MM-DD'),
+        startTime: z.string().optional().describe('Start, 24h HH:MM (e.g. "07:00")'),
+        finishTime: z
+          .string()
+          .optional()
+          .describe('Finish, 24h HH:MM (e.g. "15:30"); required with startTime'),
+        hours: z
+          .number()
+          .positive()
+          .max(24)
+          .optional()
+          .describe('Total hours; derived from start/finish when omitted'),
+        note: z.string().max(1000).optional(),
+        trackingCentreId: z
+          .string()
+          .optional()
+          .describe('v2 tracking centre id (defaults to the account default, normally "Labour")'),
+        allowDuplicate: z
+          .boolean()
+          .optional()
+          .describe('Write even if this user already has labour on the task for this date'),
+        orgId: z
+          .string()
+          .optional()
+          .describe('v2 org id to scope the user-name lookup (defaults to the AFG root org)'),
+        mode: modeSchema
+      },
+      outputSchema,
+      annotations: {
+        readOnlyHint: false,
+        idempotentHint: false,
+        destructiveHint: false,
+        openWorldHint: true
+      }
+    },
+    async (args) => {
+      try {
+        const { taskId, resolvedFrom } = await resolveTaskId(legacy, v2, args);
+        const user = await resolveUserId(v2, args.user, args.orgId ?? DEFAULT_ORG_ID);
+        const workType = await resolveWorkTypeId(v2, args.workType);
+
+        if (!args.allowDuplicate) {
+          const existing = await listTaskLabour(v2, taskId, { userId: user.id, date: args.date });
+          if (existing.length > 0) {
+            return successToolResult({
+              api: 'v2',
+              ok: false,
+              skipped: 'DUPLICATE',
+              taskId,
+              ...(resolvedFrom ? { resolvedFrom } : {}),
+              user,
+              date: args.date,
+              message: `${user.name} already has ${existing.length} labour entr${existing.length === 1 ? 'y' : 'ies'} on this task for ${args.date}; nothing written. Pass allowDuplicate: true to add another.`,
+              existing: existing.map((l) => ({
+                id: l.id,
+                startTime: l.startTime,
+                finishTime: l.finishTime,
+                hours: l.hours,
+                workType: l.workType?.name,
+                note: l.note
+              }))
+            });
+          }
+        }
+
+        const { response, body } = await addTaskLabour(v2, taskId, {
+          userId: user.id,
+          workTypeId: workType.id,
+          date: args.date,
+          startTime: args.startTime,
+          finishTime: args.finishTime,
+          hours: args.hours,
+          note: args.note,
+          trackingCentreId: args.trackingCentreId
+        });
+
+        const out: Record<string, unknown> = {
+          api: 'v2',
+          ok: true,
+          taskId,
+          user,
+          workType,
+          entry: body,
+          labour: response.data
+        };
+        if (resolvedFrom) out.resolvedFrom = resolvedFrom;
+        if (args.mode === 'raw') out.httpStatus = response.httpStatus;
+        return successToolResult(out);
+      } catch (error) {
+        return errorToolResult(error, {
+          mode: errMode(args.mode),
+          debug: { api: 'v2', args }
         });
       }
     }

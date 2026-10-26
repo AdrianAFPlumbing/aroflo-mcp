@@ -200,6 +200,7 @@ Set `AROFLO_V2_TOKEN` (a Personal Access Token from Site Administration > Settin
 - `aroflo_v2_assign_task` — `PUT /v2/tasks/{taskId}/resources` (replaces the assignee set)
 - `aroflo_v2_update_task` — `PATCH /v2/tasks/{taskId}` (description, Cust ON, priority/substatus by name, status) by v2 id or job number
 - `aroflo_v2_upload_document` — `POST /v2/tasks/{taskId}/documents/upload` (base64; small files only)
+- `aroflo_v2_add_labour` — `POST /v2/tasks/{taskId}/labours`: one timesheet block for one technician (user by name/email/id, work type by exact name, date, HH:MM start/finish or hours); refuses to double-enter a user/date unless `allowDuplicate`. Set `AROFLO_V2_ORG_ID` to change the org the user lookup is scoped to (defaults to the AFG root org)
 - `aroflo_v2_get` — read-only GET against any v2 path, for exploring endpoints while the schema is in beta
 - `aroflo_v2_convert_ids` — `POST /v2/idconversions`, maps legacy ids to v2 ids
 
