@@ -454,7 +454,7 @@ export function registerV2Tools(server: McpServer, v2: AroFloV2Client, legacy: A
       description:
         'Add one labour/timesheet entry to a task via APIv2 (POST /v2/tasks/{taskId}/labours), by v2 id or job number. ' +
         'One call = one block of time for one technician on one date. user is a v2 user id, "Given Family" name or email; workType is a v2 id or the exact work-type name (e.g. "Ausgrid", "Defence Downer", "UNSW", "Generic"). ' +
-        'Times are 24-hour HH:MM on the same day; hours is computed from them when omitted. ' +
+        'Times are 24-hour HH:MM; hours is computed from them when omitted. A block that runs past midnight (night shift, e.g. 21:00–05:00) needs overnight: true — it is booked on the start date as hours only, with the real times kept in the note, which is how AFP logs night works. ' +
         'Refuses (without writing) if that user already has labour on the task for that date, unless allowDuplicate is true — list the existing entries first with aroflo_v2_get path "tasks/{id}/labours".',
       inputSchema: {
         ...taskRefSchema,
@@ -479,6 +479,10 @@ export function registerV2Tools(server: McpServer, v2: AroFloV2Client, legacy: A
           .optional()
           .describe('Total hours; derived from start/finish when omitted'),
         note: z.string().max(1000).optional(),
+        overnight: z
+          .boolean()
+          .optional()
+          .describe('Set when finishTime is on the day after date (finish <= start)'),
         trackingCentreId: z
           .string()
           .optional()
@@ -539,7 +543,8 @@ export function registerV2Tools(server: McpServer, v2: AroFloV2Client, legacy: A
           finishTime: args.finishTime,
           hours: args.hours,
           note: args.note,
-          trackingCentreId: args.trackingCentreId
+          trackingCentreId: args.trackingCentreId,
+          overnight: args.overnight
         });
 
         const out: Record<string, unknown> = {

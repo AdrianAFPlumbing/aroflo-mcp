@@ -287,6 +287,25 @@ export interface AddLabourInput {
   hours?: number;
   note?: string;
   trackingCentreId?: string;
+  /**
+   * The block runs past midnight (finish is on the day after `date`). AroFlo
+   * labour lines are single-day, so the entry is booked on `date` as hours
+   * only, with the real start/finish recorded in the note.
+   */
+  overnight?: boolean;
+}
+
+/** Hours for a block that starts on one day and finishes the next (finish <= start). */
+export function overnightHours(startTime: string, finishTime: string): number {
+  const start = parseClockTime(startTime);
+  const finish = parseClockTime(finishTime);
+  if (finish > start) {
+    throw new AroFloApiError(
+      `overnight was set but ${finishTime} is after ${startTime} on the same day — drop overnight`,
+      { statusCode: 400 }
+    );
+  }
+  return Math.round(((24 * 60 - start + finish) / 60) * 100) / 100;
 }
 
 export interface V2LabourEntry {
@@ -335,10 +354,11 @@ export function buildLabourBody(input: AddLabourInput): Record<string, unknown> 
     date: input.date
   };
 
+  let note = input.note;
   if (input.startTime && input.finishTime) {
     const start = normaliseClockTime(input.startTime);
     const finish = normaliseClockTime(input.finishTime);
-    const span = hoursBetween(start, finish);
+    const span = input.overnight ? overnightHours(start, finish) : hoursBetween(start, finish);
     if (hours === undefined) hours = span;
     else if (Math.abs(hours - span) > 0.011) {
       throw new AroFloApiError(
@@ -346,8 +366,17 @@ export function buildLabourBody(input: AddLabourInput): Record<string, unknown> 
         { statusCode: 400 }
       );
     }
-    body['startTime'] = start;
-    body['finishTime'] = finish;
+    if (input.overnight) {
+      // Single-day labour line: book the hours on the start date and keep the
+      // real times in the note, the same way AFP logs night shifts by hand.
+      const stamp = `${start}–${finish} next day`;
+      note = note ? `${note} (${stamp})` : stamp;
+    } else {
+      body['startTime'] = start;
+      body['finishTime'] = finish;
+    }
+  } else if (input.overnight) {
+    throw new AroFloApiError('overnight needs startTime and finishTime', { statusCode: 400 });
   }
 
   if (hours === undefined) {
@@ -357,7 +386,7 @@ export function buildLabourBody(input: AddLabourInput): Record<string, unknown> 
     throw new AroFloApiError(`hours must be between 0 and 24 (got ${hours})`, { statusCode: 400 });
   }
   body['hours'] = hours;
-  if (input.note) body['note'] = input.note.slice(0, 1000);
+  if (note) body['note'] = note.slice(0, 1000);
   if (input.trackingCentreId) body['trackingCentreId'] = input.trackingCentreId;
   return body;
 }

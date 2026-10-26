@@ -63,6 +63,55 @@ describe('v2 labour helpers', () => {
     );
   });
 
+  it('books an overnight block on the start date as hours only, times in the note', () => {
+    expect(
+      buildLabourBody({
+        userId: 'U1',
+        workTypeId: 'W1',
+        date: '2026-10-21',
+        startTime: '21:00',
+        finishTime: '01:00',
+        overnight: true,
+        note: 'night works'
+      })
+    ).toEqual({
+      userId: 'U1',
+      workTypeId: 'W1',
+      date: '2026-10-21',
+      hours: 4,
+      note: 'night works (21:00–01:00 next day)'
+    });
+    expect(
+      buildLabourBody({
+        userId: 'U1',
+        workTypeId: 'W1',
+        date: '2026-10-22',
+        startTime: '21:00',
+        finishTime: '05:00',
+        overnight: true
+      })
+    ).toMatchObject({ hours: 8, note: '21:00–05:00 next day' });
+    expect(() =>
+      buildLabourBody({
+        userId: 'U1',
+        workTypeId: 'W1',
+        date: '2026-10-22',
+        startTime: '07:00',
+        finishTime: '15:30',
+        overnight: true
+      })
+    ).toThrow(/drop overnight/);
+    expect(() =>
+      buildLabourBody({
+        userId: 'U1',
+        workTypeId: 'W1',
+        date: '2026-10-22',
+        startTime: '21:00',
+        finishTime: '05:00'
+      })
+    ).toThrow(/after startTime/);
+  });
+
   it('resolves work types by exact name only', async () => {
     const v2 = {
       get: async () =>
