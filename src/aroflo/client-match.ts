@@ -97,7 +97,10 @@ export async function loadClients(legacy: AroFloClient, force = false): Promise<
   const out: ClientRecord[] = [];
   for (let page = 1; page <= 20; page += 1) {
     const response = await legacy.get('Clients', {
-      where: ['and|archive|=|false'],
+      // NB: the Clients zone WHERE field is `archived` (not `archive`). An unknown
+      // field is silently ignored by AroFlo, which then applies its default
+      // "created in the last 30 days" filter and returns only a handful of clients.
+      where: ['and|archived|=|false'],
       join: ['contacts'],
       page,
       pageSize: 500
@@ -118,7 +121,7 @@ export async function loadClients(legacy: AroFloClient, force = false): Promise<
         clientname: String(c['clientname'] ?? '').trim(),
         shortname: c['shortname'] ? String(c['shortname']) : undefined,
         email: c['email'] ? String(c['email']) : undefined,
-        archive: c['archive'] === true || c['archive'] === 'true',
+        archive: String(c['archived'] ?? c['archive'] ?? '').toLowerCase() === 'true',
         domains: [...domains]
       });
     }
