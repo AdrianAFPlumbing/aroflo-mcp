@@ -18,7 +18,10 @@ const envSchema = z.object({
       return trimmed && trimmed.length > 0 ? trimmed : undefined;
     }),
   AROFLO_TIMEOUT_MS: z.coerce.number().int().positive().default(65_000),
-  AROFLO_MAX_RETRIES: z.coerce.number().int().min(0).max(10).default(2),
+  // 4 retries with the clients' jittered backoff (~2s/5s/12s/30s) rides out a
+  // rate-limited minute during an email flood while staying under Power
+  // Automate's HTTP action timeout.
+  AROFLO_MAX_RETRIES: z.coerce.number().int().min(0).max(10).default(4),
   // APIv2 (Open Beta). Optional: v2 tools are only registered when a token is present.
   AROFLO_V2_BASE_URL: z.string().url().default('https://api.aroflo.com/v2/'),
   AROFLO_V2_TOKEN: z

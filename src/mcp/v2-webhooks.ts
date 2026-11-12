@@ -209,9 +209,38 @@ export async function handleV2Webhooks(
         return true;
       }
 
+      // Idempotency guard: Power Automate retries a timed-out call, which
+      // would attach the same files twice. Skip files whose name already
+      // exists on the task. Fail-open — if the listing errors, upload as before.
+      // AroFlo stores filenames with spaces converted to underscores.
+      const normaliseName = (n: string) => n.trim().toLowerCase().replace(/\s+/g, '_');
+      const existingNames = new Set<string>();
+      try {
+        const existing = await v2.get<unknown>(`tasks/${encodeURIComponent(taskId)}/documents`, {
+          limit: 100
+        });
+        const items = Array.isArray(existing.data)
+          ? existing.data
+          : ((existing.data as { items?: unknown[]; data?: unknown[] } | null)?.items ??
+            (existing.data as { items?: unknown[]; data?: unknown[] } | null)?.data ??
+            []);
+        for (const item of items as Array<Record<string, unknown>>) {
+          const name = [item['fileName'], item['filename'], item['name']].find(
+            (v): v is string => typeof v === 'string' && v.trim().length > 0
+          );
+          if (name) existingNames.add(normaliseName(name));
+        }
+      } catch (error) {
+        logger.warn({ taskId, err: error }, 'v2 webhook: could not list existing documents');
+      }
+
       const results: Array<Record<string, unknown>> = [];
       for (const f of wanted) {
         const filename = (f.filename ?? f.name ?? '').trim();
+        if (existingNames.has(normaliseName(filename))) {
+          results.push({ filename, ok: true, skipped: 'already attached' });
+          continue;
+        }
         try {
           const { response, bytes } = await uploadTaskDocument(v2, taskId, {
             filename,

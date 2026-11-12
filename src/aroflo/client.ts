@@ -100,6 +100,12 @@ export class AroFloClient {
   private async requestWithRetry(plan: RequestPlan): Promise<AroFloClientResponse> {
     return pRetry(() => this.throttledRequest(plan), {
       retries: this.maxRetries,
+      // Longer, jittered backoff so a burst of imports (e.g. after an Outlook
+      // outage) waits out a rate-limit window instead of failing in ~3s.
+      minTimeout: 2_000,
+      maxTimeout: 30_000,
+      factor: 2.5,
+      randomize: true,
       shouldRetry: ({ error }) => isRetryableError(error),
       onFailedAttempt: (error) => {
         logger.warn(
